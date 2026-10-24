@@ -1,0 +1,13 @@
+# PRAMAAN-AI Backend Dependencies
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.30.0,<1.0.0
+pydantic>=2.9.0,<3.0.0
+pypdf>=5.0.0
+pillow>=10.0.0
+python-multipart>=0.0.9
+requests>=2.31.0
+rapidfuzz>=3.6.0
+
+# Testing
+pytest>=8.0.0
+httpx>=0.27.0

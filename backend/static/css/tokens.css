@@ -1,0 +1,134 @@
+/* ==========================================================================
+   PRAMAAN-AI Design System Tokens
+   Based on docs/UI_UX_SPEC.md (Version 1.0.0)
+   Authoritative, calm, high-trust regulatory decision-support workspace.
+   ========================================================================== */
+
+:root {
+  /* Brand & Shell (Deep Ink Foundation) */
+  --navy-950: #0b132b;
+  --navy-900: #1c2541;
+  --navy-850: #1f2a4a;
+  --navy-800: #253258;
+  --navy-700: #3a4870;
+
+  /* Workspace Canvas (Daylight Slate Surfaces) */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --white: #ffffff;
+
+  /* Sovereign & Deliberate Accents */
+  --saffron-600: #c2410c;
+  --saffron-500: #ea580c;
+  --saffron-50: #fff7ed;
+  --cobalt-700: #1e40af;
+  --cobalt-600: #1d4ed8;
+  --cobalt-500: #2563eb;
+  --cobalt-50: #eff6ff;
+
+  /* Semantic Status: Document Verification (The 6 Exact Problem Statement States) */
+  --status-verified-fg: #15803d;
+  --status-verified-bg: #f0fdf4;
+  --status-verified-border: #bbf7d0;
+
+  --status-mismatch-fg: #b91c1c;
+  --status-mismatch-bg: #fef2f2;
+  --status-mismatch-border: #fecaca;
+
+  --status-expired-fg: #c2410c;
+  --status-expired-bg: #fff7ed;
+  --status-expired-border: #fed7aa;
+
+  --status-pending-fg: #475569;
+  --status-pending-bg: #f1f5f9;
+  --status-pending-border: #cbd5e1;
+
+  /* NOTE: Source unavailable uses warning ochre, NEVER red, to avoid penalizing applicant */
+  --status-source-unavail-fg: #a16207;
+  --status-source-unavail-bg: #fefce8;
+  --status-source-unavail-border: #fef08a;
+
+  --status-manual-review-fg: #4338ca;
+  --status-manual-review-bg: #eef2ff;
+  --status-manual-review-border: #c7d2fe;
+
+  /* Semantic Status: Validation Finding Severities */
+  --severity-compliant-fg: #047857;
+  --severity-compliant-bg: #ecfdf5;
+  --severity-compliant-border: #a7f3d0;
+
+  --severity-deficiency-fg: #be123c;
+  --severity-deficiency-bg: #fff1f2;
+  --severity-deficiency-border: #fecdd3;
+
+  --severity-anomaly-fg: #b45309;
+  --severity-anomaly-bg: #fffbeb;
+  --severity-anomaly-border: #fde68a;
+
+  --severity-inconclusive-fg: #475569;
+  --severity-inconclusive-bg: #f8fafc;
+  --severity-inconclusive-border: #e2e8f0;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Spacing Scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.08);
+  --shadow-modal: 0 20px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+
+  /* Accessibility & Focus Tokens */
+  --focus-ring-color: #1d4ed8;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring: 0 0 0 var(--focus-ring-width) #ffffff, 0 0 0 calc(var(--focus-ring-width) + var(--focus-ring-offset)) var(--focus-ring-color);
+
+  /* Transitions */
+  --transition-fast: 120ms cubic-bezier(0, 0, 0.2, 1);
+  --transition-normal: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Skeleton Shimmer Tokens */
+  --skeleton-base: #e2e8f0;
+  --skeleton-highlight: #f8fafc;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms !important;
+    --transition-normal: 0ms !important;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRAMAAN-AI — Evidence-First AICTE Scrutiny Copilot</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Modular Design System Stylesheets -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+
+  <!-- Top Sovereign Bar -->
+  <header class="sovereign-bar" role="banner">
+    <div class="brand-wing">
+      <div class="brand-crest">AICTE</div>
+      <div class="brand-titles">
+        <div class="brand-name">PRAMAAN-AI</div>
+        <div class="brand-sub">Regulatory Validation Copilot (SIH26261)</div>
+      </div>
+    </div>
+
+    <!-- Mandatory DEMO DATA Indicator -->
+    <div class="demo-pill" role="status" aria-label="Demo Prototype Indicator">
+      <svg width="12" height="12" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+      <span class="demo-text-full">DEMO DATA — NOT CONNECTED TO LIVE AICTE SYSTEMS (PROTOTYPE DECISION SUPPORT)</span>
+      <span class="demo-text-short">DEMO / SIMULATED</span>
+    </div>
+
+    <div class="controls-wing">
+      <div class="role-switcher-wrapper">
+        <span style="color: var(--slate-400);">Role:</span>
+        <select id="role-select" class="role-select" aria-label="Switch User Role">
+          <option value="reviewer" selected>Scrutiny Officer (Reviewer)</option>
+          <option value="institution_user">College Registrar (Applicant)</option>
+          <option value="rules_admin">Rules Administrator</option>
+          <option value="auditor">Vigilance Compliance Auditor</option>
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="health-indicator-dot" class="health-dot"></span>
+        <span id="health-indicator-text" style="color: var(--slate-300);">Checking...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Subheader -->
+  <nav class="app-subheader" role="navigation" aria-label="Main Navigation">
+    <div class="nav-tabs">
+      <button class="nav-tab-btn active" data-route="command-center">Overview</button>
+      <button class="nav-tab-btn" data-route="queue">Scrutiny Queue</button>
+      <button class="nav-tab-btn" data-route="case-file">Case File Dossier</button>
+      <button class="nav-tab-btn" data-route="studio">Evidence Studio</button>
+      <button class="nav-tab-btn" data-route="verification">Verification Ladder</button>
+      <button class="nav-tab-btn" data-route="comparison">Historical & Reuse</button>
+      <button class="nav-tab-btn" data-route="preflight">Applicant Pre-Flight</button>
+      <button class="nav-tab-btn" data-route="audit">Audit Ledger</button>
+    </div>
+
+    <div class="quick-tools">
+      <button class="search-box-btn" onclick="window.appRouter.navigate('queue')" title="Global Search (Ctrl+K)">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <span>Search Applications</span>
+        <span class="kbd-shortcut">Ctrl+K</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main View Container -->
+  <main id="main-content" class="app-container" role="main"></main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Reviewer Decision Modal Dialog -->
+  <div id="decision-modal" class="modal-backdrop" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modal-decision-title">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-decision-title" class="modal-title">Record Scrutiny Review Decision</h3>
+        <button style="background: none; border: none; font-size: 16px; cursor: pointer; color: var(--slate-500);" onclick="window.appModal.closeDecisionModal()" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; color: var(--slate-600);">
+          Decisions are committed to the append-only cryptographic audit chain. Select an authorized regulatory action:
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="decision-choice" value="CONFIRM_DEFICIENCY" checked>
+            <span><strong>Confirm Deficiency:</strong> Issue formal 7-day compliance cure notice</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="decision-choice" value="REQUEST_CLARIFICATION">
+            <span><strong>Request Clarification:</strong> Seek supplementary institutional records</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="decision-choice" value="DISMISS_FINDING">
+            <span><strong>Dismiss Finding:</strong> Statutory exemption applied (Justification required)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="decision-choice" value="RECOMMEND_INSPECTION">
+            <span><strong>Recommend Physical Inspection:</strong> Route to Standing Appellate Committee</span>
+          </label>
+        </div>
+
+        <label for="decision-remarks" style="display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; color: var(--slate-700);">
+          Officer Scrutiny Remarks / Statutory Justification:
+        </label>
+        <textarea 
+          id="decision-remarks" 
+          rows="3" 
+          style="width: 100%; padding: 8px 10px; font-family: inherit; font-size: 13px; border: 1px solid var(--slate-300); border-radius: var(--radius-md);"
+          placeholder="State specific APH clauses and reasons for this determination..."
+        >Fire Safety NOC expired prior to academic cutoff date. Issued 7-day cure notice per APH Chapter II Clause 4.2.</textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel" class="btn btn-outline">Cancel</button>
+        <button id="btn-modal-submit" class="btn btn-primary">Commit Decision to Audit Chain</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modular Application Entrypoint -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

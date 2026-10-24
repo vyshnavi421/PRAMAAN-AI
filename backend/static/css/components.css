@@ -1,0 +1,887 @@
+/* ==========================================================================
+   PRAMAAN-AI UI Component Stylesheet
+   Based on docs/UI_UX_SPEC.md (Version 1.0.0)
+   ========================================================================== */
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+.btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1.2;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--cobalt-600);
+  outline-offset: 2px;
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+.btn-primary {
+  background-color: var(--cobalt-600);
+  color: var(--white);
+  border-color: var(--cobalt-700);
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--cobalt-700);
+}
+
+.btn-outline {
+  background-color: var(--white);
+  color: var(--slate-700);
+  border-color: var(--slate-300);
+}
+.btn-outline:hover:not(:disabled) {
+  background-color: var(--slate-50);
+  border-color: var(--slate-400);
+  color: var(--slate-900);
+}
+
+.btn-sm {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.btn-danger {
+  background-color: var(--severity-deficiency-bg);
+  color: var(--severity-deficiency-fg);
+  border-color: var(--severity-deficiency-border);
+}
+.btn-danger:hover:not(:disabled) {
+  background-color: #ffe4e6;
+}
+
+/* ==========================================================================
+   Status & Severity Badges
+   ========================================================================== */
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.badge::before {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+/* Document Verification Status (The 6 Statutory States) */
+.badge-verified {
+  background-color: var(--status-verified-bg);
+  color: var(--status-verified-fg);
+  border: 1px solid var(--status-verified-border);
+}
+.badge-verified::before {
+  content: "✓";
+}
+
+.badge-mismatch {
+  background-color: var(--status-mismatch-bg);
+  color: var(--status-mismatch-fg);
+  border: 1px solid var(--status-mismatch-border);
+}
+.badge-mismatch::before {
+  content: "✕";
+}
+
+.badge-expired {
+  background-color: var(--status-expired-bg);
+  color: var(--status-expired-fg);
+  border: 1px solid var(--status-expired-border);
+}
+.badge-expired::before {
+  content: "◷";
+}
+
+.badge-pending {
+  background-color: var(--status-pending-bg);
+  color: var(--status-pending-fg);
+  border: 1px solid var(--status-pending-border);
+}
+.badge-pending::before {
+  content: "⌛";
+}
+
+.badge-source-unavailable {
+  background-color: var(--status-source-unavail-bg);
+  color: var(--status-source-unavail-fg);
+  border: 1px solid var(--status-source-unavail-border);
+}
+.badge-source-unavailable::before {
+  content: "⚠";
+}
+
+.badge-manual-review {
+  background-color: var(--status-manual-review-bg);
+  color: var(--status-manual-review-fg);
+  border: 1px solid var(--status-manual-review-border);
+}
+.badge-manual-review::before {
+  content: "👤";
+}
+
+/* Finding Severities */
+.badge-compliant {
+  background-color: var(--severity-compliant-bg);
+  color: var(--severity-compliant-fg);
+  border: 1px solid var(--severity-compliant-border);
+}
+.badge-compliant::before {
+  content: "✓";
+}
+
+.badge-deficiency {
+  background-color: var(--severity-deficiency-bg);
+  color: var(--severity-deficiency-fg);
+  border: 1px solid var(--severity-deficiency-border);
+  box-shadow: 0 0 0 1px rgba(190, 18, 60, 0.15);
+}
+.badge-deficiency::before {
+  content: "✕";
+}
+
+.badge-anomaly {
+  background-color: var(--severity-anomaly-bg);
+  color: var(--severity-anomaly-fg);
+  border: 1px solid var(--severity-anomaly-border);
+}
+.badge-anomaly::before {
+  content: "⚠";
+}
+
+.badge-inconclusive {
+  background-color: var(--severity-inconclusive-bg);
+  color: var(--severity-inconclusive-fg);
+  border: 1px solid var(--severity-inconclusive-border);
+}
+.badge-inconclusive::before {
+  content: "?";
+}
+
+/* ==========================================================================
+   Metric Cards Grid
+   ========================================================================== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.metric-card {
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+}
+
+.metric-val {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--slate-900);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.metric-meta {
+  font-size: 12px;
+  color: var(--slate-500);
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Data Tables
+   ========================================================================== */
+.table-card {
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-6);
+}
+
+.table-toolbar {
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--white);
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+.data-table th {
+  background-color: var(--slate-50);
+  color: var(--slate-700);
+  font-weight: 600;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--slate-200);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.data-table th.sortable {
+  cursor: pointer;
+}
+.data-table th.sortable:hover {
+  background-color: var(--slate-100);
+}
+
+.data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--slate-100);
+  color: var(--slate-800);
+  vertical-align: middle;
+}
+
+.data-table tr:hover td {
+  background-color: var(--slate-50);
+}
+.data-table tr.selected td {
+  background-color: var(--cobalt-50);
+}
+
+.mono-hash {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background-color: var(--slate-100);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--slate-700);
+}
+
+/* ==========================================================================
+   Split-Screen Evidence Studio
+   ========================================================================== */
+.studio-grid {
+  display: grid;
+  grid-template-columns: 48% 52%;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 1200px) {
+  .studio-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.studio-panel {
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.studio-panel-header {
+  background-color: var(--slate-50);
+  border-bottom: 1px solid var(--slate-200);
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.studio-panel-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--slate-900);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.studio-panel-body {
+  padding: var(--space-4);
+  max-height: 650px;
+  overflow-y: auto;
+}
+
+/* Finding Item Card */
+.finding-card {
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  cursor: pointer;
+  background-color: var(--white);
+  transition: all var(--transition-fast);
+}
+.finding-card:hover {
+  border-color: var(--cobalt-500);
+  background-color: var(--slate-50);
+}
+.finding-card.active {
+  border-color: var(--cobalt-600);
+  border-width: 2px;
+  background-color: var(--cobalt-50);
+}
+
+.finding-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.rule-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cobalt-700);
+}
+
+.finding-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-900);
+  margin-bottom: 4px;
+}
+
+.finding-reason {
+  font-size: 12px;
+  color: var(--slate-600);
+  line-height: 1.4;
+}
+
+/* Explain-Why Box */
+.explain-card {
+  background-color: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.explain-sec {
+  margin-bottom: var(--space-3);
+}
+
+.explain-sec-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+  margin-bottom: 2px;
+}
+
+.explain-sec-val {
+  font-size: 13px;
+  color: var(--slate-900);
+}
+
+.citation-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background-color: var(--slate-200);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.action-callout {
+  background-color: var(--cobalt-50);
+  border-left: 3px solid var(--cobalt-600);
+  padding: 8px 12px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12px;
+  color: var(--cobalt-700);
+}
+
+/* ==========================================================================
+   PDF Viewer Simulation & Bounding Box
+   ========================================================================== */
+.pdf-viewer-backdrop {
+  background-color: #334155;
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 580px;
+  position: relative;
+  overflow: auto;
+}
+
+.pdf-sheet {
+  background-color: var(--white);
+  width: 100%;
+  max-width: 480px;
+  min-height: 600px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  border: 1px solid #cbd5e1;
+  position: relative;
+  padding: 28px 26px;
+  font-size: 11.5px;
+  color: #1e293b;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-sheet::after {
+  content: "OFFICIAL STATUTORY RECORD • AICTE SCRUTINY EVIDENCE";
+  position: absolute;
+  bottom: 30px;
+  right: 20px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  font-family: var(--font-mono);
+  color: #cbd5e1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pdf-header {
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 10px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.pdf-header h4 {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.04em;
+}
+.pdf-header p {
+  font-size: 9.5px;
+  color: #475569;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.bbox-rect {
+  position: absolute;
+  border: 2px solid var(--severity-deficiency-fg);
+  background: rgba(190, 18, 60, 0.14);
+  box-shadow: 0 0 0 2px rgba(190, 18, 60, 0.35);
+  border-radius: 3px;
+  z-index: 10;
+  transition: all var(--transition-fast);
+}
+.bbox-rect.green {
+  border-color: var(--severity-compliant-fg);
+  background: rgba(4, 120, 87, 0.14);
+  box-shadow: 0 0 0 2px rgba(4, 120, 87, 0.35);
+}
+
+.bbox-tag {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  background-color: var(--severity-deficiency-fg);
+  color: var(--white);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.bbox-rect.green .bbox-tag {
+  background-color: var(--severity-compliant-fg);
+}
+
+/* Viewer Controls Bar */
+.viewer-controls-bar {
+  background-color: var(--slate-100);
+  border-bottom: 1px solid var(--slate-200);
+  padding: 8px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+.viewer-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Region Unavailable Callout Banner */
+.region-unavailable-callout {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Evidence Graph & Trace Table
+   ========================================================================== */
+.graph-container {
+  width: 100%;
+  height: 520px;
+  background-color: #f8fafc;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.graph-svg-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.graph-node {
+  position: absolute;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  z-index: 5;
+}
+.graph-node:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+}
+.graph-node.active-node {
+  outline: 2px solid var(--cobalt-600);
+  outline-offset: 2px;
+}
+
+.node-app { background: var(--navy-900); color: var(--white); top: 30px; left: 30px; width: 170px; }
+.node-doc { background: #0284c7; color: var(--white); top: 120px; left: 30px; width: 170px; }
+.node-claim { background: var(--white); color: var(--slate-900); border: 1px solid var(--slate-300); top: 220px; left: 30px; width: 170px; }
+.node-rule { background: #7c3aed; color: var(--white); top: 120px; left: 260px; width: 170px; }
+.node-verification { background: #0d9488; color: var(--white); top: 30px; left: 260px; width: 170px; }
+.node-finding { background: var(--severity-deficiency-bg); color: var(--severity-deficiency-fg); border: 1px solid var(--severity-deficiency-border); top: 220px; left: 260px; width: 170px; }
+.node-action { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; top: 320px; left: 260px; width: 170px; }
+
+/* Bottom Detail Accordion & Tabs */
+.studio-detail-section {
+  margin-top: var(--space-5);
+  background-color: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.detail-tab-bar {
+  display: flex;
+  background-color: var(--slate-50);
+  border-bottom: 1px solid var(--slate-200);
+}
+.detail-tab-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-600);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.detail-tab-btn.active {
+  color: var(--cobalt-700);
+  background-color: var(--white);
+  border-bottom-color: var(--cobalt-600);
+}
+.detail-content-panel {
+  padding: var(--space-4);
+  font-size: 12px;
+  color: var(--slate-700);
+}
+
+
+/* ==========================================================================
+   Toasts & Modals
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: var(--navy-950);
+  color: var(--white);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: slideIn 180ms ease-out;
+}
+@keyframes slideIn {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(11, 19, 43, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  animation: fadeIn 150ms ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-box {
+  background-color: var(--white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+  width: 90%;
+  max-width: 580px;
+  overflow: hidden;
+  border: 1px solid var(--slate-200);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--slate-200);
+  background-color: var(--slate-50);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--slate-900);
+}
+
+.modal-body {
+  padding: 20px;
+  font-size: 13px;
+  color: var(--slate-700);
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--slate-200);
+  background-color: var(--slate-50);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Universal Accessible Focus States
+   ========================================================================== */
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.finding-card:focus-visible,
+.graph-node:focus-visible,
+.tab-btn:focus-visible,
+.detail-tab-btn:focus-visible,
+.data-table th.sortable:focus-visible,
+.data-table tr:focus-visible {
+  outline: 2px solid var(--cobalt-600) !important;
+  outline-offset: 2px !important;
+}
+
+/* ==========================================================================
+   Skeleton Loaders (High-Trust Shimmer)
+   ========================================================================== */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--slate-200) 25%,
+    var(--slate-100) 50%,
+    var(--slate-200) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite ease-in-out;
+  border-radius: var(--radius-sm);
+  display: block;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none !important;
+    background: var(--slate-200) !important;
+  }
+}
+
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 6px;
+  width: 100%;
+}
+.skeleton-title {
+  height: 22px;
+  width: 60%;
+  margin-bottom: 12px;
+}
+.skeleton-card {
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background-color: var(--white);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-row {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--slate-100);
+  align-items: center;
+}
+
+/* ==========================================================================
+   Empty States
+   ========================================================================== */
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.empty-state-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--slate-400);
+  margin-bottom: var(--space-2);
+}
+.empty-state-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--slate-800);
+}
+.empty-state-desc {
+  font-size: 13px;
+  color: var(--slate-500);
+  max-width: 440px;
+  line-height: 1.5;
+  margin-bottom: var(--space-3);
+}
+
+/* ==========================================================================
+   RFC 7807 Standard Error Banner & Guardrails
+   ========================================================================== */
+.error-card {
+  background-color: var(--severity-deficiency-bg);
+  border: 1px solid var(--severity-deficiency-border);
+  border-left: 4px solid var(--severity-deficiency-fg);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: var(--space-4);
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.error-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--severity-deficiency-fg);
+  margin-bottom: 4px;
+}
+.error-card-detail {
+  font-size: 12.5px;
+  color: var(--slate-800);
+  line-height: 1.5;
+}
+.error-card-meta {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--slate-600);
+  margin-top: 6px;
+}
+
+.coverage-incomplete-banner {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #b45309;
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin-bottom: var(--space-4);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+

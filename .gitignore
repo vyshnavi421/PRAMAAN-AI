@@ -1,0 +1,39 @@
+# Environments & Secrets
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# Protected local document storage & uploads
+storage/
+backend/storage/protected/*
+!backend/storage/protected/.gitkeep
+backend/storage/uploads/*
+!backend/storage/uploads/.gitkeep
+*.bin
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+docs/reference/SIH Winning Pack PRAMAAN-AI for AICTE Approvals.pdf
