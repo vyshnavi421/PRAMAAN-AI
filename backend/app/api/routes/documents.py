@@ -36,6 +36,8 @@ ALLOWED_MAGIC_SIGNATURES = {
     b"\xff\xd8\xff": "image/jpeg",
     b"\x89PNG\r\n\x1a\n": "image/png"
 }
+# Only these roles may add or re-extract documents (AUDITOR / RULES_ADMIN are read-only here).
+WRITE_ROLES = [UserRole.INSTITUTION_USER, UserRole.REVIEWER]
 DISALLOWED_EXTENSIONS = {".exe", ".bat", ".cmd", ".sh", ".py", ".js", ".svg", ".html", ".htm", ".vbs", ".dll"}
 
 
@@ -162,7 +164,7 @@ async def upload_document(
     file: UploadFile = File(..., description="File to upload (PDF, JPEG, PNG <= 25MB)"),
     document_type: str = Form(..., description="DocumentType enum string"),
     application_id: str = Form(..., description="Application UUID"),
-    current_user: UserContext = Depends(get_current_user)
+    current_user: UserContext = Depends(require_roles(WRITE_ROLES))
 ):
     """
     Validates uploaded file against STRIDE threat model:
@@ -216,57 +218,69 @@ async def upload_document(
             detail="Security Violation: File header magic bytes do not match an allowed format (PDF, JPEG, PNG)."
         )
 
-    # 4. Store file bytes securely and generate internal storage key and SHA-256 digest
-    doc_uuid = str(uuid.uuid4())
-    sha256_hash = hashlib.sha256(content).hexdigest()
-    storage_path = global_document_storage.store_document(app.institution_id, doc_uuid, content)
-    logical_storage_key = f"storage/protected/{app.institution_id}/{doc_uuid}.bin"
-
+    # 4. Validate document type BEFORE anything is written
     try:
         doc_type_enum = DocumentType(document_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid DocumentType '{document_type}'.")
 
-    # Extract real fields from uploaded content bytes
-    extracted_fields, initial_status, note = global_document_extractor.extract_document(
-        content_bytes=content,
-        doc_type=doc_type_enum,
-        original_filename=clean_filename
-    )
+    # 5. Store bytes, then record metadata. Any failure rolls back both the file and the metadata.
+    doc_uuid = str(uuid.uuid4())
+    sha256_hash = hashlib.sha256(content).hexdigest()
+    logical_storage_key = f"storage/protected/{app.institution_id}/{doc_uuid}.bin"
+    new_doc: Optional[Document] = None
+    try:
+        global_document_storage.store_document(app.institution_id, doc_uuid, content)
 
-    new_doc = Document(
-        id=doc_uuid,
-        application_id=application_id,
-        document_type=doc_type_enum,
-        original_filename=clean_filename,
-        storage_key=logical_storage_key,
-        file_size_bytes=len(content),
-        mime_type=detected_mime,
-        sha256_hash=sha256_hash,
-        verification_status=initial_status,
-        extracted_fields=extracted_fields
-    )
+        # Extract real fields from uploaded content bytes
+        extracted_fields, initial_status, note = global_document_extractor.extract_document(
+            content_bytes=content,
+            doc_type=doc_type_enum,
+            original_filename=clean_filename
+        )
 
-    # Append to application
-    app.documents.append(new_doc)
-    global_application_service.persist()
+        new_doc = Document(
+            id=doc_uuid,
+            application_id=application_id,
+            document_type=doc_type_enum,
+            original_filename=clean_filename,
+            storage_key=logical_storage_key,
+            file_size_bytes=len(content),
+            mime_type=detected_mime,
+            sha256_hash=sha256_hash,
+            verification_status=initial_status,
+            extracted_fields=extracted_fields
+        )
 
-    # Record in audit trail
-    global_audit_service.record_event(
-        actor_id=current_user.user_id,
-        event_type="DOCUMENT_UPLOADED",
-        details={
-            "document_id": doc_uuid,
-            "filename": clean_filename,
-            "file_size": len(content),
-            "sha256": sha256_hash,
-            "document_type": doc_type_enum.value,
-            "mime_type": detected_mime,
-            "fields_extracted": len(extracted_fields),
-            "extraction_note": note
-        },
-        application_id=application_id
-    )
+        # Append to application
+        app.documents.append(new_doc)
+        global_application_service.persist()
+
+        # Record in audit trail
+        global_audit_service.record_event(
+            actor_id=current_user.user_id,
+            event_type="DOCUMENT_UPLOADED",
+            details={
+                "document_id": doc_uuid,
+                "filename": clean_filename,
+                "file_size": len(content),
+                "sha256": sha256_hash,
+                "document_type": doc_type_enum.value,
+                "mime_type": detected_mime,
+                "fields_extracted": len(extracted_fields),
+                "extraction_note": note
+            },
+            application_id=application_id
+        )
+    except BaseException:
+        if new_doc is not None and new_doc in app.documents:
+            app.documents.remove(new_doc)
+            try:
+                global_application_service.persist()
+            except Exception:
+                pass  # in-memory state is already rolled back; do not mask the original error
+        global_document_storage.delete_document(app.institution_id, doc_uuid)
+        raise
 
     return new_doc
 
@@ -278,27 +292,48 @@ async def upload_document(
 )
 def extract_document_fields(
     document_id: str = Path(..., description="Document UUID"),
-    current_user: UserContext = Depends(get_current_user)
+    current_user: UserContext = Depends(require_roles(WRITE_ROLES))
 ):
     """
     Executes real text extraction and OCR fallback on actual stored document bytes.
     Extracts traceable fields with bounding boxes, confidence scores, and provenance.
     If document text is unreadable and OCR is unavailable, honestly abstains and routes to manual review.
+
+    Existing fields are never overwritten by a failed/empty re-extraction. Seeded demo documents
+    have no stored binary, so they are refused (409); a real upload whose bytes are missing is 404.
     """
     app, doc = verify_document_ownership(current_user, document_id)
 
+    if global_document_storage.is_demo_seed_key(doc.storage_key):
+        raise HTTPException(
+            status_code=409,
+            detail="Seeded demo documents have no stored binary; extraction is not available for them."
+        )
+
     content_bytes = global_document_storage.get_document_bytes(doc.storage_key, doc.id)
-    if content_bytes:
+    if not content_bytes:
+        raise HTTPException(status_code=404, detail=f"Protected document bytes for '{document_id}' not found.")
+
+    try:
         extracted, rec_status, note = global_document_extractor.extract_document(
             content_bytes=content_bytes,
             doc_type=doc.document_type,
             original_filename=doc.original_filename
         )
+    except Exception:
+        raise HTTPException(status_code=500, detail="Extraction failed; the document was left unchanged.")
+
+    if extracted:
         doc.extracted_fields = extracted
         if rec_status == DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED:
             doc.verification_status = rec_status
+        global_application_service.persist()
+    elif doc.extracted_fields:
+        note = f"Re-extraction produced no fields; existing fields preserved. ({note})"
     else:
-        note = "No document binary content available to parse."
+        if rec_status == DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED:
+            doc.verification_status = rec_status
+            global_application_service.persist()
 
     global_audit_service.record_event(
         actor_id=current_user.user_id,
