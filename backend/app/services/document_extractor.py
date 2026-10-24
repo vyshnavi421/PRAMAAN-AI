@@ -10,9 +10,12 @@ import os
 import re
 import uuid
 import shutil
+import csv
+import subprocess
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 from pypdf import PdfReader
+from pdf2image import convert_from_bytes
 
 from app.models.enums import DocumentType, DocumentVerificationStatus, ExtractionQuality
 from app.models.domain import ExtractedField, FieldProvenance, Document
@@ -91,6 +94,77 @@ class RealDocumentExtractor:
         except Exception:
             return [], 0
 
+    def _ocr_pdf_pages(self, content_bytes: bytes) -> Tuple[List[Dict[str, Any]], int]:
+        """Run local Tesseract OCR on PDF pages and retain normalized word boxes.
+
+        If PDF rendering or OCR fails, return no pages so the caller can
+        safely route the document for manual review.
+        """
+        if not self.has_tesseract:
+            return [], 0
+
+        pages_data: List[Dict[str, Any]] = []
+        try:
+            images = convert_from_bytes(content_bytes, dpi=200)
+            for page_number, image in enumerate(images, start=1):
+                image_buffer = io.BytesIO()
+                image.save(image_buffer, format="PNG")
+
+                result = subprocess.run(
+                    ["tesseract", "stdin", "stdout", "-l", "eng", "tsv"],
+                    input=image_buffer.getvalue(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=False,
+                    timeout=60,
+                )
+                if result.returncode != 0:
+                    return [], 0
+
+                tsv_text = result.stdout.decode("utf-8", errors="replace")
+                words = []
+                spans = []
+                width, height = image.size
+
+                for row in csv.DictReader(io.StringIO(tsv_text), delimiter="\t"):
+                    if row.get("level") != "5":
+                        continue
+                    word = (row.get("text") or "").strip()
+                    if not word:
+                        continue
+
+                    try:
+                        x = int(row["left"])
+                        y = int(row["top"])
+                        w = int(row["width"])
+                        h = int(row["height"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+
+                    words.append(word)
+                    spans.append({
+                        "text": word,
+                        "bbox": [
+                            round(max(0, min(1, x / width)), 3),
+                            round(max(0, min(1, y / height)), 3),
+                            round(max(0, min(1, (x + w) / width)), 3),
+                            round(max(0, min(1, (y + h) / height)), 3),
+                        ],
+                    })
+
+                pages_data.append({
+                    "page_number": page_number,
+                    "text": " ".join(words),
+                    "spans": spans,
+                    "width": width,
+                    "height": height,
+                })
+
+            return pages_data, len(pages_data)
+        except Exception:
+            # Includes invalid PDFs, unavailable Poppler, and OCR failures.
+            return [], 0
+
     def extract_document(
         self,
         content_bytes: bytes,
@@ -105,18 +179,22 @@ class RealDocumentExtractor:
         pages_data, total_pages = self.extract_text_and_spans(content_bytes)
         combined_text = " ".join(p["text"] for p in pages_data).strip()
 
-        # Check if PDF has no extractable text layer (scanned raster image or blank page)
+        # Scanned PDFs: attempt OCR only when the required tools are available.
+        used_ocr = False
         if len(combined_text) < 15:
-            # Attempt OCR fallback if tesseract is installed
-            if self.has_tesseract:
-                # OCR branch
-                return [], DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, "OCR fallback returned inconclusive text. Routed for manual review."
-            else:
-                # Honest abstention: No text layer and OCR engine is unavailable
+            if not self.has_tesseract:
                 return [], DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
-                    "Document contains scanned images without an embedded text layer, "
-                    "and local OCR engine is unavailable. Honestly abstaining and routing for human scrutiny."
+                    "No usable PDF text layer and OCR engine unavailable; manual review required."
                 )
+            pages_data, total_pages = self._ocr_pdf_pages(content_bytes)
+            combined_text = " ".join(page["text"] for page in pages_data).strip()
+            if len(combined_text) < 15:
+                return [], DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
+                    "OCR produced insufficient readable text; manual review required."
+                )
+            used_ocr = True
+
+        extraction_method = "TESSERACT_OCR" if used_ocr else "PDF_TEXT_STREAM"
 
         # Real text extraction from parsed text stream
         fields: List[ExtractedField] = []
@@ -151,13 +229,13 @@ class RealDocumentExtractor:
                     field_value=norm_exp,
                     raw_value=raw_exp,
                     data_type="DATE",
-                    confidence=0.97,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.97,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or f"Valid until: {raw_exp}",
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -176,13 +254,13 @@ class RealDocumentExtractor:
                     field_value=norm_iss,
                     raw_value=raw_iss,
                     data_type="DATE",
-                    confidence=0.96,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.96,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or f"Issued on: {raw_iss}",
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -200,13 +278,13 @@ class RealDocumentExtractor:
                     field_value=raw_auth,
                     raw_value=raw_auth,
                     data_type="STRING",
-                    confidence=0.94,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.94,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or raw_auth,
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -226,12 +304,12 @@ class RealDocumentExtractor:
                     raw_value=raw_name,
                     data_type="STRING",
                     confidence=0.98,
-                    extraction_method="PDF_TEXT_STREAM",
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or raw_name,
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -245,13 +323,13 @@ class RealDocumentExtractor:
                     field_value=raw_intake,
                     raw_value=raw_intake,
                     data_type="INTEGER",
-                    confidence=0.95,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.95,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or f"Intake: {raw_intake}",
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -265,13 +343,13 @@ class RealDocumentExtractor:
                     field_value=raw_area,
                     raw_value=raw_area,
                     data_type="NUMERIC",
-                    confidence=0.95,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.95,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or f"Land Area: {raw_area}",
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -285,13 +363,13 @@ class RealDocumentExtractor:
                     field_value=raw_b,
                     raw_value=b_match.group(1).strip(),
                     data_type="NUMERIC",
-                    confidence=0.94,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.94,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
                         surrounding_snippet=snip or f"Built-up area: {raw_b}",
-                        quality_label=ExtractionQuality.HIGH
+                        quality_label=ExtractionQuality.MEDIUM if used_ocr else ExtractionQuality.HIGH
                     )
                 ))
 
@@ -308,8 +386,8 @@ class RealDocumentExtractor:
                     field_value=norm_d,
                     raw_value=raw_d,
                     data_type="DATE",
-                    confidence=0.85,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.85,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
                         bounding_box=bbox,
@@ -323,8 +401,8 @@ class RealDocumentExtractor:
                     field_value=original_filename,
                     raw_value=original_filename,
                     data_type="STRING",
-                    confidence=0.80,
-                    extraction_method="PDF_TEXT_STREAM",
+                    confidence=0.65 if used_ocr else 0.80,
+                    extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=1,
                         bounding_box=None,
@@ -333,6 +411,10 @@ class RealDocumentExtractor:
                     )
                 ))
 
+        if used_ocr:
+            return fields, DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
+                f"OCR extracted {len(fields)} field(s); human verification is required."
+            )
         return fields, DocumentVerificationStatus.VERIFICATION_PENDING, f"Extracted {len(fields)} fields from PDF text stream."
 
 
