@@ -204,6 +204,15 @@ export class CaseFileView {
               <button class="btn btn-outline btn-sm" type="button" data-extract-document="${esc(doc.id)}">Re-extract</button>
             </div>`
           : '<button class="btn btn-outline btn-sm" type="button" tabindex="-1">Inspect Evidence →</button>';
+        const claimsSummary = claims.length
+          ? `<div style="font-size: 11px; color: var(--slate-500);">${claims.length} claim${claims.length === 1 ? '' : 's'}</div>
+             <div style="font-size: 11px; line-height: 1.4; margin-top: 4px;">${claims.slice(0, 2).map((field) => {
+               const confidence = Number.isFinite(Number(field.confidence))
+                 ? ` · ${Math.round(Number(field.confidence) * 100)}%`
+                 : '';
+               return `<div><code>${esc(field.field_key)}</code>: <strong>${esc(field.field_value)}</strong><span style="color: var(--slate-500);">${confidence}</span></div>`;
+             }).join('')}${claims.length > 2 ? `<div style="color: var(--slate-500);">+${claims.length - 2} more</div>` : ''}</div>`
+          : 'No fields extracted';
 
         docRows += `
           <tr
@@ -218,7 +227,7 @@ export class CaseFileView {
             <td>${esc(doc.original_filename)}</td>
             <td><span class="mono-hash" title="${esc(doc.sha256_hash || '')}">${esc(String(doc.sha256_hash || 'Unavailable').slice(0, 16))}...</span></td>
             <td>${esc(String(doc.page_count || '—'))} pg</td>
-            <td>${claims.length ? `${claims.length} claim${claims.length === 1 ? '' : 's'}` : 'No fields extracted'}</td>
+            <td>${claimsSummary}</td>
             <td><span class="badge ${badgeClass}">${esc(status)}</span></td>
             <td>${actionButton}</td>
           </tr>
