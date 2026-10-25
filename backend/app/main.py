@@ -2,6 +2,7 @@
 PRAMAAN-AI Main FastAPI Application Entrypoint
 Provides health probes, demo banners, and API route dispatch.
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,13 +27,26 @@ app = FastAPI(
 
 # CORS: explicit origin allowlist — wildcard + credentials is rejected by browsers and is insecure.
 # Override ALLOWED_ORIGINS in the environment for non-local deployments.
-_allowed_origins = [
+_default_allowed_origins = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://127.0.0.1:3000",
 ]
+_configured_origins = os.getenv("ALLOWED_ORIGINS", "").strip()
+_allowed_origins = (
+    [origin.strip() for origin in _configured_origins.split(",") if origin.strip()]
+    if _configured_origins
+    else _default_allowed_origins
+)
+
+if not _allowed_origins:
+    raise RuntimeError("ALLOWED_ORIGINS must contain at least one allowed origin.")
+if "*" in _allowed_origins:
+    raise RuntimeError(
+        "ALLOWED_ORIGINS cannot contain '*' while CORS credentials are enabled."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
@@ -77,7 +91,6 @@ app.include_router(documents_router, prefix=settings.API_V1_PREFIX)
 
 
 # Mount interactive static frontend at root
-import os
 from fastapi.staticfiles import StaticFiles
 
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
