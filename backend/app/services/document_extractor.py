@@ -288,7 +288,7 @@ class RealDocumentExtractor:
                     )
                 ))
 
-        elif doc_type in (DocumentType.AFFIDAVIT_GENERAL, DocumentType.TRUST_RESOLUTION):
+        elif doc_type in (DocumentType.AFFIDAVIT_GENERAL, DocumentType.GOVERNING_BODY_RESOLUTION):
             # 1. Institution Name
             inst_match = re.search(
                 r"(?:institution|college|university|academy|institute|affidavit\s*of)[:\s]+([^,\n\r]+)",
@@ -333,7 +333,7 @@ class RealDocumentExtractor:
                     )
                 ))
 
-        elif doc_type in (DocumentType.LAND_DOCUMENT, DocumentType.LAND_USE_CERTIFICATE):
+        elif doc_type in (DocumentType.LAND_USE_CERTIFICATE,):
             area_match = re.search(r"(?:land\s*area|total\s*area|area)[:\s]+([\d\.]+)\s*(?:acres?|hectares?)?", combined_text, re.IGNORECASE)
             if area_match:
                 raw_area = area_match.group(1).strip()
@@ -353,7 +353,7 @@ class RealDocumentExtractor:
                     )
                 ))
 
-        elif doc_type in (DocumentType.BUILDING_PLAN_APPROVAL, DocumentType.ARCHITECT_CERTIFICATE):
+        elif doc_type in (DocumentType.BUILDING_PLAN_ARCHITECT,):
             b_match = re.search(r"(?:built[\s\-]?up\s*area|total\s*area|area)[:\s]+([\d\.,]+)\s*(?:sq\.?\s*m|sqm)?", combined_text, re.IGNORECASE)
             if b_match:
                 raw_b = b_match.group(1).replace(",", "").strip()
