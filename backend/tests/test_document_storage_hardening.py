@@ -43,6 +43,25 @@ def make_pdf(text: str) -> bytes:
 NOC_PDF = make_pdf("STATE FIRE AND RESCUE SERVICES CERTIFICATE No: FS-2026-9999 Valid Until: 2029-12-31")
 
 
+def test_extracted_expiry_bbox_focuses_on_date_substring():
+    """A claim embedded in a longer PDF text chunk gets a focused normalized box."""
+    fields, status, note = global_document_extractor.extract_document(
+        content_bytes=make_pdf("Issuing Authority: Fire Service Valid until: 2024-01-14"),
+        doc_type=DocumentType.FIRE_SAFETY_NOC,
+        original_filename="fire_safety_noc.pdf",
+    )
+    expiry = next(field for field in fields if field.field_key == "noc_expiry_date")
+    bbox = expiry.provenance.bounding_box
+    assert status == DocumentVerificationStatus.VERIFICATION_PENDING, note
+    assert bbox is not None and len(bbox) == 4
+    assert 0 <= bbox[0] < bbox[2] <= 1
+    assert 0 <= bbox[1] < bbox[3] <= 1
+    # The expected date token should occupy only a small piece of the containing text line.
+    assert bbox[2] - bbox[0] < 0.2
+    assert bbox[0] > 0.1
+
+
+
 @pytest.mark.parametrize("document_type", list(DocumentType))
 def test_extractor_handles_every_public_document_type(document_type):
     """All exposed DocumentType values should extract a supported field or honestly abstain."""
