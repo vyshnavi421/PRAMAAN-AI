@@ -104,7 +104,7 @@ jobs:
         run: python -m pytest tests_e2e -q
       - name: Upload demo screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pramaan-ai-evidence-studio-screenshot
           path: artifacts/
