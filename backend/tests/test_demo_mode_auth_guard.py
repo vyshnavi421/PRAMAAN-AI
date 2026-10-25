@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.config import settings
+from app.core.auth import get_test_auth_headers
 
 client = TestClient(app)
 
@@ -37,3 +38,13 @@ def test_demo_login_available_when_demo_mode_enabled(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["user"]["role"] == "REVIEWER"
+
+
+def test_existing_demo_session_rejected_when_demo_mode_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "IS_DEMO_MODE", True)
+    headers = get_test_auth_headers(user_id="usr-officer-01")
+
+    monkeypatch.setattr(settings, "IS_DEMO_MODE", False)
+    response = client.get("/api/v1/auth/me", headers=headers)
+
+    assert response.status_code == 403

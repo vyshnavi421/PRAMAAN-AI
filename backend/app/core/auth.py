@@ -14,6 +14,7 @@ from enum import Enum
 from datetime import datetime, timezone, timedelta
 import secrets
 from fastapi import Header, HTTPException, Depends
+from app.core.config import settings
 from pydantic import BaseModel, Field
 
 
@@ -228,6 +229,15 @@ def get_current_user(
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired session. Please authenticate via /api/v1/auth/session."
+        )
+
+    if not settings.IS_DEMO_MODE:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Demo authentication is disabled. "
+                "Configure a production identity provider."
+            ),
         )
 
     return UserContext(
