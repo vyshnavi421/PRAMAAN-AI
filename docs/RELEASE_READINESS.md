@@ -3,8 +3,10 @@
 **Audit Date:** 2026-10-23  
 **System Version:** v1.0.0 (SIH26261 Prototype)  
 **Target Environment:** Local Workstation / Demonstration Sandbox (FastAPI + Static ES Modules)  
-**Overall Readiness Verdict:** **PASSED — READY FOR SIH DEMONSTRATION & EVALUATION**  
+**Overall Readiness Verdict (at the time of this audit):** **PASSED — READY FOR SIH DEMONSTRATION & EVALUATION**  
 **Compliance Standard:** AICTE Approval Process Handbook (APH) 2024–2027 & `AGENTS.md` Rules
+
+> **Historical snapshot notice (2026-10-23):** Test counts, timings, and flow results below describe that recorded run; they are not live CI status or current production-performance estimates. The referenced local `scratch/verify_flow.py` script is not tracked in this repository, so that 13-step run cannot be reproduced with that exact script from a fresh clone. For current checks, use `docs/SETUP.md`, the checked-in pytest suite, and the GitHub Actions quality-gates workflow. Benchmark measurements are from synthetic fixtures and simulated issuer responses only.
 
 ---
 
@@ -27,7 +29,7 @@ PRAMAAN-AI has undergone a release-readiness audit encompassing automated test s
 
 ## 2. Verification of the Exact 13-Step Flow
 
-The end-to-end statutory pre-scrutiny flow was executed against the active HTTP server (`http://127.0.0.1:8000`) using the automated verification harness `scratch/verify_flow.py`.
+The recorded end-to-end statutory pre-scrutiny flow was executed against a local HTTP server (`http://127.0.0.1:8000`) using a local verification harness. The original `scratch/verify_flow.py` file is not tracked in this repository, so the 13-step output below is historical evidence, not a reproducible checked-in test command.
 
 ```
 ================================================================================
@@ -270,8 +272,10 @@ python -m pytest backend/tests -v
 # Run 15-bundle synthetic evaluation benchmark
 python run_benchmark.py --report-path ../docs/EVALUATION_REPORT.md
 
-# Verify exact 13-step review flow
-python scratch/verify_flow.py
+# Checked-in UI delivery and health smoke tests
+python -m pytest backend/tests/test_demo_smoke.py -q
+
+# Use docs/DEMO_SCRIPT.md for the interactive browser walkthrough.
 
 # Run frontend JavaScript syntax check
 Get-ChildItem -Recurse -Filter *.js backend/static/js | ForEach-Object { node --check $_.FullName }
