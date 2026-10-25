@@ -269,8 +269,40 @@ export class VerificationLadderView {
     `;
 
     await this.loadAdapters();
+    await this.loadActiveApplicationDocuments();
     this.wireEvents();
     await this.refreshHistory();
+  }
+
+  async loadActiveApplicationDocuments() {
+    const select = document.getElementById('select-document');
+    const app = store.getState().activeApplicationData;
+    if (!select || !app || !Array.isArray(app.documents) || app.documents.length === 0) return;
+
+    const existing = new Set(Array.from(select.options, (option) => option.value));
+    app.documents.forEach((doc) => {
+      if (existing.has(doc.id)) return;
+      const option = document.createElement('option');
+      const suffix = String(doc.id || '').slice(0, 8);
+      option.value = doc.id;
+      option.textContent = `Current dossier · ${doc.document_type} — ${doc.original_filename} (${suffix})`;
+      select.append(option);
+    });
+
+    // Prefer an actual uploaded file in the active dossier, then its Fire Safety NOC,
+    // so the verification demo can follow the same document from intake to issuer check.
+    const documents = app.documents.slice();
+    const preferred = documents.slice().reverse().find(
+      (doc) => String(doc.storage_key || '').startsWith('storage/protected/')
+    ) || documents.find((doc) => doc.document_type === 'FIRE_SAFETY_NOC') || documents[0];
+
+    if (preferred && existing.has(preferred.id) === false) {
+      select.value = preferred.id;
+      this.selectedDocId = preferred.id;
+    } else if (preferred && Array.from(select.options).some((option) => option.value === preferred.id)) {
+      select.value = preferred.id;
+      this.selectedDocId = preferred.id;
+    }
   }
 
   async loadAdapters() {
