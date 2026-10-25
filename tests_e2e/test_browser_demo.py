@@ -204,7 +204,7 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         png_row.get_by_role("button", name="View p. 1").click()
         expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
         expect(page.locator("#cf-page-view-status")).to_contain_text(
-            "rendered from the actual uploaded document bytes"
+            "rendered from the actual uploaded bytes"
         )
 
         # Continue the same document through the end-to-end scrutiny story:
