@@ -11,7 +11,7 @@ Enforces strict server-side authorization and threat mitigation per docs/THREAT_
 3. Sensitive access auditing: every document read appends to the immutable audit trail.
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Path, Depends, UploadFile, File, Form, Response
+from fastapi import APIRouter, HTTPException, Path, Depends, UploadFile, File, Form, Response, Request
 from pydantic import BaseModel, Field
 import os
 import re
@@ -25,9 +25,15 @@ from app.services.application_service import global_application_service
 from app.services.audit_service import global_audit_service
 from app.services.document_storage import global_document_storage
 from app.services.document_extractor import global_document_extractor
+from app.services.upload_validation import (
+    MAX_UPLOAD_SIZE_BYTES, MULTIPART_OVERHEAD_ALLOWANCE, validate_upload,
+)
 
 
 router = APIRouter(prefix="", tags=["Protected Documents & Secure Upload"])
+
+# Keep per-read memory bounded; UploadFile is already spooled by the multipart parser.
+UPLOAD_READ_CHUNK_BYTES = 1024 * 1024
 
 # Constants from docs/THREAT_MODEL.md
 MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
@@ -154,91 +160,117 @@ def get_document_content(
     )
 
 
+
+@router.get(
+    "/documents/{document_id}/pages/{page}/view",
+    summary="Render a page of the real uploaded document as PNG (RBAC Enforced)"
+)
+def get_document_page_view(
+    document_id: str = Path(..., description="Document UUID"),
+    page: int = Path(..., ge=1, description="1-indexed page number"),
+    current_user: UserContext = Depends(get_current_user)
+):
+    """Render the requested page of a stored upload; never invent content for missing bytes."""
+    app, doc = verify_document_ownership(current_user, document_id)
+
+    if global_document_storage.is_demo_seed_key(doc.storage_key):
+        raise HTTPException(status_code=404, detail="Seeded demo document has no stored binary to render.")
+    if page > max(1, doc.page_count):
+        raise HTTPException(status_code=404, detail=f"Page {page} does not exist (document has {doc.page_count}).")
+
+    content_bytes = global_document_storage.get_document_bytes(doc.storage_key, doc.id)
+    if not content_bytes:
+        raise HTTPException(status_code=404, detail=f"Protected document bytes for '{document_id}' not found.")
+
+    png = global_document_extractor.render_page_png(content_bytes, doc.mime_type, page)
+    if png is None:
+        raise HTTPException(status_code=503, detail="Page rendering is unavailable on this server.")
+    global_audit_service.record_event(
+        actor_id=current_user.user_id,
+        event_type="DOCUMENT_PAGE_VIEWED",
+        details={
+            "document_id": doc.id,
+            "page": page,
+            "actor_role": current_user.role.value,
+            "institution_id": app.institution_id,
+        },
+        application_id=app.application_id
+    )
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=60"}
+    )
+
 @router.post(
     "/documents/upload",
     response_model=Document,
     status_code=201,
-    summary="Secure Document Intake with Magic Byte & Size Validation"
+    summary="Secure Document Intake with extension, signature, and size validation"
 )
 async def upload_document(
+    request: Request,
     file: UploadFile = File(..., description="File to upload (PDF, JPEG, PNG <= 25MB)"),
     document_type: str = Form(..., description="DocumentType enum string"),
     application_id: str = Form(..., description="Application UUID"),
     current_user: UserContext = Depends(require_roles(WRITE_ROLES))
 ):
     """
-    Validates uploaded file against STRIDE threat model:
-    - Rejects files exceeding 25MB (HTTP 413)
-    - Rejects disallowed extensions and mismatching magic bytes (HTTP 400)
-    - Strips client-supplied paths to prevent directory traversal
-    - Stores file with internal UUID key and SHA-256 hash
+    Accept a real upload, enforce size/extension/signature rules, extract claims,
+    store under a generated UUID, and roll back file/metadata when intake fails.
+    Note: FastAPI/Starlette parses multipart framing before invoking this handler;
+    the chunk loop bounds the additional application-level read buffer.
     """
     app = global_application_service.get_application(application_id)
     if not app:
         raise HTTPException(status_code=404, detail=f"Application '{application_id}' not found.")
 
-    # Institutional tenancy check
-    if current_user.role == UserRole.INSTITUTION_USER:
-        if current_user.institution_id and app.institution_id != current_user.institution_id:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Forbidden: You cannot upload documents to another institution's dossier."
-            )
-
-    # 1. Filename sanitization & Extension check
-    raw_filename = file.filename or "upload.bin"
-    clean_filename = sanitize_filename(raw_filename)
-    ext = os.path.splitext(clean_filename)[1].lower()
-    if ext in DISALLOWED_EXTENSIONS:
+    if current_user.role == UserRole.INSTITUTION_USER and app.institution_id != current_user.institution_id:
         raise HTTPException(
-            status_code=400,
-            detail=f"Security Violation: Extension '{ext}' is prohibited by file upload policy."
+            status_code=403,
+            detail="Forbidden: You cannot upload documents to another institution's dossier."
         )
 
-    # 2. Read bytes with size cap
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Payload Too Large: File size {len(content)} bytes exceeds 25MB statutory limit."
-        )
-
-    # 3. Magic byte header inspection
-    is_valid_magic = False
-    detected_mime = "application/octet-stream"
-    for magic_prefix, mime in ALLOWED_MAGIC_SIGNATURES.items():
-        if content.startswith(magic_prefix):
-            is_valid_magic = True
-            detected_mime = mime
-            break
-
-    if not is_valid_magic:
-        raise HTTPException(
-            status_code=400,
-            detail="Security Violation: File header magic bytes do not match an allowed format (PDF, JPEG, PNG)."
-        )
-
-    # 4. Validate document type BEFORE anything is written
     try:
         doc_type_enum = DocumentType(document_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid DocumentType '{document_type}'.")
 
-    # 5. Store bytes, then record metadata. Any failure rolls back both the file and the metadata.
+    declared_length = request.headers.get("content-length")
+    if declared_length and declared_length.isdigit() and int(declared_length) > (
+        MAX_UPLOAD_SIZE_BYTES + MULTIPART_OVERHEAD_ALLOWANCE
+    ):
+        raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB limit.")
+
+    clean_filename = sanitize_filename(file.filename or "upload.bin")
+
+    chunks: List[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB limit.")
+        chunks.append(chunk)
+    content = b"".join(chunks)
+
+    detected_mime, validation_error = validate_upload(clean_filename, content)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=f"Security Violation: {validation_error}")
+
     doc_uuid = str(uuid.uuid4())
     sha256_hash = hashlib.sha256(content).hexdigest()
     logical_storage_key = f"storage/protected/{app.institution_id}/{doc_uuid}.bin"
     new_doc: Optional[Document] = None
     try:
         global_document_storage.store_document(app.institution_id, doc_uuid, content)
-
-        # Extract real fields from uploaded content bytes
         extracted_fields, initial_status, note = global_document_extractor.extract_document(
             content_bytes=content,
             doc_type=doc_type_enum,
             original_filename=clean_filename
         )
-
         new_doc = Document(
             id=doc_uuid,
             application_id=application_id,
@@ -248,15 +280,12 @@ async def upload_document(
             file_size_bytes=len(content),
             mime_type=detected_mime,
             sha256_hash=sha256_hash,
+            page_count=global_document_extractor.count_pages(content, detected_mime),
             verification_status=initial_status,
             extracted_fields=extracted_fields
         )
-
-        # Append to application
         app.documents.append(new_doc)
         global_application_service.persist()
-
-        # Record in audit trail
         global_audit_service.record_event(
             actor_id=current_user.user_id,
             event_type="DOCUMENT_UPLOADED",
@@ -278,7 +307,7 @@ async def upload_document(
             try:
                 global_application_service.persist()
             except Exception:
-                pass  # in-memory state is already rolled back; do not mask the original error
+                pass
         global_document_storage.delete_document(app.institution_id, doc_uuid)
         raise
 
