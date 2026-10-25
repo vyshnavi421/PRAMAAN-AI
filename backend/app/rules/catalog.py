@@ -162,17 +162,37 @@ class RequiredFieldAbsentOrUncertainRule(BaseRule):
                 rule_name=self.meta.name,
                 clause_citation=self.meta.source_citation,
                 is_demo=self.meta.is_demo,
-                status=FindingStatus.DEFICIENCY,
+                status=FindingStatus.INCONCLUSIVE,
                 severity=self.meta.severity,
-                reason="Required field 'noc_expiry_date' was not found in the Fire Safety NOC document.",
-                recommended_action=self.meta.reviewer_next_action,
+                reason=(
+                    "Required field 'noc_expiry_date' was not extracted or is empty. "
+                    "The system cannot determine whether the field is absent from the "
+                    "original document or was missed during extraction."
+                ),
+                recommended_action=(
+                    "Manual visual verification required. Inspect the Fire Safety NOC "
+                    "and confirm whether the expiry date is present."
+                ),
                 evidence=[
                     FindingEvidence(
                         document_id=doc.id,
                         document_type=doc.document_type.value,
-                        field_key="noc_expiry_date"
+                        field_key="noc_expiry_date",
+                        extracted_value=(
+                            field.raw_value if field is not None else None
+                        ),
+                        page_number=(
+                            field.provenance.page_number
+                            if field is not None
+                            else None
+                        ),
+                        bounding_box=(
+                            field.provenance.bounding_box
+                            if field is not None
+                            else None
+                        ),
                     )
-                ]
+                ],
             )
 
         # Check extraction quality / confidence

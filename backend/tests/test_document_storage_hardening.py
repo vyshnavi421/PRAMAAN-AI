@@ -140,11 +140,11 @@ def test_f1_unknown_or_malformed_non_protected_keys_never_get_synthetic_bytes(tm
     assert DocumentStorageService.is_demo_seed_key(key) is False
 
 
-def test_f1_every_seeded_document_key_is_recognised_and_served():
+def test_f1_every_seeded_document_key_is_recognised_and_served(tmp_path):
     seeded = [d for a in app_svc._applications.values() if a.application_id in ApplicationService._SEEDED_IDS
               for d in a.documents if not d.storage_key.startswith("storage/protected/")]
     assert seeded
-    svc = DocumentStorageService(root_dir="/nonexistent-root-for-test")
+    svc = DocumentStorageService(root_dir=str(tmp_path / "storage"))
     for d in seeded:
         assert DocumentStorageService.is_demo_seed_key(d.storage_key), d.storage_key
         assert svc.get_document_bytes(d.storage_key, d.id).startswith(b"%PDF-")
