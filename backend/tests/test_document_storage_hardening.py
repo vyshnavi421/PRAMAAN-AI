@@ -43,6 +43,45 @@ def make_pdf(text: str) -> bytes:
 NOC_PDF = make_pdf("STATE FIRE AND RESCUE SERVICES CERTIFICATE No: FS-2026-9999 Valid Until: 2029-12-31")
 
 
+@pytest.mark.parametrize("document_type", list(DocumentType))
+def test_extractor_handles_every_public_document_type(document_type):
+    """All exposed DocumentType values should extract a supported field or honestly abstain."""
+    fields, status, note = global_document_extractor.extract_document(
+        content_bytes=make_pdf(
+            "Institution: Test Institute Valid Until: 2029-12-31 "
+            "Land Area: 50 acres Built-up Area: 2000 sqm"
+        ),
+        doc_type=document_type,
+        original_filename=f"{document_type.value.lower()}.pdf",
+    )
+    assert status in {
+        DocumentVerificationStatus.VERIFICATION_PENDING,
+        DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED,
+    }, note
+    if not fields:
+        assert status == DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, note
+
+
+
+@pytest.mark.parametrize("document_type", list(DocumentType))
+def test_extractor_supports_every_declared_document_type(document_type):
+    """Every public upload type must route through extraction without enum-attribute errors."""
+    fields, status, note = global_document_extractor.extract_document(
+        content_bytes=make_pdf(
+            "Institution: Test Institute Valid Until: 2029-12-31 "
+            "Land Area: 50 acres Built-up Area: 2000 sqm"
+        ),
+        doc_type=document_type,
+        original_filename=f"{document_type.value.lower()}.pdf",
+    )
+    assert fields, f"{document_type.value} should at least retain an auditable generic claim: {note}"
+    assert status in {
+        DocumentVerificationStatus.VERIFICATION_PENDING,
+        DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED,
+    }
+
+
+
 @pytest.fixture(autouse=True)
 def isolated_storage(tmp_path, monkeypatch):
     """Point protected storage at a temp dir so tests never touch the real storage folder."""
