@@ -476,7 +476,15 @@ python backend/run_benchmark.py
 
 The benchmark evaluates 15 canonical synthetic bundles and writes measurements to `docs/EVALUATION_REPORT.md`. Rerun it before quoting performance or accuracy figures.
 
-### 3. Frontend ES-Module Syntax Validation
+### 3. Measure Field Extraction on Synthetic PDFs
+
+```bash
+python backend/evaluate_document_extraction.py
+```
+
+The [dated extraction evaluation report](docs/EXTRACTION_EVALUATION.md) records a CI run over 30 generated one-page PDFs and 50 expected field slots: 46 exact matches, 0 wrong/unexpected extracted claims, and 4 abstentions (92% exact-match rate with abstentions retained in the denominator). This is a narrow synthetic text-stream evaluation, **not production accuracy or an OCR benchmark**. The unsupported date cases are deliberately routed to manual review.
+
+### 4. Frontend ES-Module Syntax Validation
 
 The frontend uses browser ES modules. The quality-gates workflow checks every JavaScript file under `backend/static/js/` as an ES module with Node.js 22, rather than checking only the entry-point files.
 
