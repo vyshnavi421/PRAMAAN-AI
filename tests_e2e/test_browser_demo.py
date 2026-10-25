@@ -1,7 +1,9 @@
 import os
+import io
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
+from PIL import Image
 
 
 BASE_URL = os.getenv("PRAMAAN_BASE_URL", "http://127.0.0.1:8000")
@@ -146,4 +148,26 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         )
         expect(uploaded_row).to_contain_text("1 claim", timeout=20000)
         expect(uploaded_row).to_contain_text("2027-06-30")
+
+        # Exercise the protected page-view endpoint using a real raster image so the test
+        # does not depend on Poppler being installed on the CI runner.
+        png_buffer = io.BytesIO()
+        Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
+        page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
+        page.locator("#cf-upload-file").set_input_files({
+            "name": "scan_upload_test.png",
+            "mimeType": "image/png",
+            "buffer": png_buffer.getvalue(),
+        })
+        page.locator("#btn-upload-document").click()
+        expect(feedback).to_contain_text(
+            "Upload completed — actual backend response", timeout=20000
+        )
+        png_row = page.locator("#cf-docs-table tr").filter(has_text="scan_upload_test.png")
+        expect(png_row).to_be_visible(timeout=20000)
+        png_row.get_by_role("button", name="View p. 1").click()
+        expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
+        expect(page.locator("#cf-page-view-status")).to_contain_text(
+            "rendered from the actual uploaded document bytes"
+        )
         browser.close()
