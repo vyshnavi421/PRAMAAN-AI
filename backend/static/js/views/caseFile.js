@@ -146,7 +146,11 @@ export class CaseFileView {
         </div>
         <div id="cf-page-view-status" role="status" aria-live="polite" style="padding: 12px; color: var(--slate-600);">Choose “View p. 1” on a real uploaded file.</div>
         <div style="padding: 0 16px 16px; overflow: auto; text-align: center;">
-          <img id="cf-page-view-image" alt="Rendered page from the uploaded institutional document" hidden style="max-width: 100%; height: auto; border: 1px solid var(--slate-200); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+          <div id="cf-page-view-stage" style="position: relative; display: none; width: fit-content; max-width: 100%; margin: 0 auto;">
+            <img id="cf-page-view-image" alt="Rendered page from the uploaded institutional document" hidden style="display: block; max-width: 100%; height: auto; border: 1px solid var(--slate-200); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+            <svg id="cf-page-view-overlay" data-evidence-overlay="true" aria-label="Bounding boxes for extracted claims on this page" role="img" viewBox="0 0 1000 1000" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible;" hidden></svg>
+          </div>
+          <div id="cf-page-view-legend" style="max-width: 760px; margin: 12px auto 0; text-align: left;"></div>
         </div>
       </div>
     `;
@@ -270,7 +274,13 @@ export class CaseFileView {
       document.getElementById('btn-close-page-viewer')?.addEventListener('click', () => {
         const panel = document.getElementById('cf-page-viewer');
         const image = document.getElementById('cf-page-view-image');
+        const stage = document.getElementById('cf-page-view-stage');
+        const overlay = document.getElementById('cf-page-view-overlay');
+        const legend = document.getElementById('cf-page-view-legend');
         if (image) { image.removeAttribute('src'); image.hidden = true; }
+        if (stage) stage.style.display = 'none';
+        if (overlay) { overlay.replaceChildren(); overlay.hidden = true; }
+        if (legend) legend.replaceChildren();
         if (panel) panel.hidden = true;
         const status = document.getElementById('cf-page-view-status');
         if (status) status.textContent = 'Preview closed.';
@@ -371,14 +381,79 @@ export class CaseFileView {
     `;
   }
 
+  renderEvidenceOverlays(doc, pageNumber) {
+    const overlay = document.getElementById('cf-page-view-overlay');
+    const legend = document.getElementById('cf-page-view-legend');
+    if (!overlay || !legend) return { highlighted: 0, claims: 0 };
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    overlay.replaceChildren();
+    legend.replaceChildren();
+    const fields = Array.isArray(doc?.extracted_fields) ? doc.extracted_fields : [];
+    const pageFields = fields.filter((field) => Number(field.provenance?.page_number || 1) === Number(pageNumber));
+    let highlighted = 0;
+
+    pageFields.forEach((field, index) => {
+      const box = field.provenance?.bounding_box;
+      const valid = Array.isArray(box) && box.length === 4 && box.every(
+        (value) => Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 1
+      ) && Number(box[2]) > Number(box[0]) && Number(box[3]) > Number(box[1]);
+
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--slate-200);border-radius:var(--radius-md);margin-top:6px;background:var(--white);font-size:12px;';
+      const marker = document.createElement('span');
+      marker.textContent = String(index + 1);
+      marker.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;border:2px solid var(--cobalt-600);border-radius:5px;color:var(--cobalt-700);font-weight:700;flex-shrink:0;';
+      const text = document.createElement('div');
+      const key = document.createElement('strong');
+      key.textContent = field.field_key || 'extracted_claim';
+      const value = document.createElement('div');
+      value.textContent = String(field.field_value ?? '');
+      const source = document.createElement('div');
+      source.style.cssText = 'color:var(--slate-500);margin-top:3px;';
+      source.textContent = valid
+        ? `Highlighted on page ${pageNumber} · ${Math.round(Number(field.confidence || 0) * 100)}% extraction confidence`
+        : `Page ${pageNumber} · no usable bounding box; inspect the source snippet manually.`;
+      text.append(key, value, source);
+      item.append(marker, text);
+      legend.append(item);
+
+      if (valid) {
+        const rect = document.createElementNS(svgNS, 'rect');
+        rect.setAttribute('x', String(Number(box[0]) * 1000));
+        rect.setAttribute('y', String(Number(box[1]) * 1000));
+        rect.setAttribute('width', String((Number(box[2]) - Number(box[0])) * 1000));
+        rect.setAttribute('height', String((Number(box[3]) - Number(box[1])) * 1000));
+        rect.setAttribute('rx', '5');
+        rect.setAttribute('fill', 'rgba(250, 204, 21, 0.20)');
+        rect.setAttribute('stroke', '#b45309');
+        rect.setAttribute('stroke-width', '3');
+        rect.setAttribute('vector-effect', 'non-scaling-stroke');
+        rect.setAttribute('data-field-key', String(field.field_key || ''));
+        const title = document.createElementNS(svgNS, 'title');
+        title.textContent = `${field.field_key}: ${field.field_value}`;
+        rect.append(title);
+        overlay.append(rect);
+        highlighted += 1;
+      }
+    });
+
+    overlay.hidden = highlighted === 0;
+    return { highlighted, claims: pageFields.length };
+  }
+
   async viewDocumentPage(documentId, pageNumber = 1, button = null) {
     const panel = document.getElementById('cf-page-viewer');
     const status = document.getElementById('cf-page-view-status');
     const image = document.getElementById('cf-page-view-image');
-    if (!panel || !status || !image) return;
+    const stage = document.getElementById('cf-page-view-stage');
+    const overlay = document.getElementById('cf-page-view-overlay');
+    const legend = document.getElementById('cf-page-view-legend');
+    if (!panel || !status || !image || !stage || !overlay || !legend) return;
 
     panel.hidden = false;
     image.hidden = true;
+    overlay.hidden = true;
     status.textContent = 'Requesting the real stored page from the protected API…';
     if (button) { button.disabled = true; button.textContent = 'Loading…'; }
     try {
@@ -390,9 +465,17 @@ export class CaseFileView {
       this.pageObjectUrl = URL.createObjectURL(blob);
       image.src = this.pageObjectUrl;
       image.hidden = false;
-      status.textContent = `Page ${pageNumber} rendered from the actual uploaded document bytes.`;
+      stage.style.display = 'block';
+      const app = store.getState().activeApplicationData;
+      const uploadedDoc = app?.documents?.find((item) => item.id === documentId);
+      const result = this.renderEvidenceOverlays(uploadedDoc, pageNumber);
+      status.textContent = result.highlighted
+        ? `Page ${pageNumber} rendered from the actual uploaded bytes. ${result.highlighted} claim bounding box(es) highlighted; ${result.claims} claim(s) on this page.`
+        : `Page ${pageNumber} rendered from the actual uploaded bytes. No usable bounding boxes are available for claims on this page; the original claim snippets remain listed below.`;
       panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
+      stage.style.display = 'none';
+      image.hidden = true;
       status.textContent = `Page preview unavailable: ${err.message}. This does not affect stored claims or verification status.`;
       window.appToast.show(`Page preview unavailable: ${err.message}`, 'warning');
     } finally {
