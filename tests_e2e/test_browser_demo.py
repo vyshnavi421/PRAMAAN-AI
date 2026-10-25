@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -29,6 +30,10 @@ def test_demo_entry_and_review_path():
         expect(page.locator("#studio-graph-container")).to_be_visible()
         page.locator("#btn-studio-mode-pdf").click()
 
+        screenshot_dir = Path(os.getenv("PRAMAAN_SCREENSHOT_DIR", "/tmp/pramaan-demo-artifacts"))
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(screenshot_dir / "pramaan-evidence-studio.png"), full_page=True)
+
         deficiency = page.locator("#studio-findings-list .finding-card").filter(
             has_text="DEFICIENCY"
         )
@@ -49,4 +54,25 @@ def test_demo_entry_and_review_path():
         expect(page.locator("#chain-status-text")).to_contain_text(
             "Cryptographic Audit Chain Intact", timeout=20000
         )
+        browser.close()
+
+
+
+def test_reviewer_queue_is_populated():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.goto(BASE_URL, wait_until="domcontentloaded")
+
+        expect(page.locator("#health-indicator-text")).to_contain_text(
+            "Backend: Operational", timeout=30000
+        )
+        page.locator('button[data-route="queue"]').click()
+        expect(page.locator("h1.page-title")).to_have_text(
+            "Scrutiny Officer Work Queue", timeout=15000
+        )
+        expect(
+            page.get_by_role("table", name="Assigned Institutional Applications")
+        ).to_be_visible(timeout=15000)
+        expect(page.locator("#queue-count-badge")).to_contain_text("Showing")
         browser.close()
