@@ -106,4 +106,34 @@ npm run test:unit
 ```powershell
 cd frontend
 npx playwright test
+## 5. QA Execution Record — 2026-10-25
+
+### Environment
+- Operating system: Windows
+- Python: 3.12.4
+- Test framework: pytest 9.1.1
+- Browser automation: Playwright 1.64.1 with Chromium
+
+### Executed Results
+
+| Test Run | Command | Result |
+|---|---|---|
+| Backend suite | `python -m pytest backend/tests -v` | 186 passed in 6.88 seconds |
+| Browser end-to-end suite | `python -m pytest tests_e2e -v` | 2 passed in 9.88 seconds |
+
+### Notes and Limitations
+- The two browser tests initially failed because the application server was unavailable at `http://127.0.0.1:8000/`. After starting the application with the correct Python import path, both browser tests passed.
+- The backend run emitted a Starlette deprecation warning related to `httpx` and `starlette.testclient`. It did not cause test failures.
+- The results above represent two successful test runs. The full combined suite should also be rerun with the application server running before recording an all-suite result.
+- These results do not independently establish production readiness, regulatory compliance, or real-world document-verification accuracy.
+### Combined Test Run — 2026-10-25
+
+- **Command:** `python -m pytest backend/tests tests_e2e -v`
+- **Result:** 188 passed, 0 failed
+- **Execution time:** 13.33 seconds
+- **Warning:** Starlette reports a deprecation warning concerning `httpx` and `starlette.testclient`.
+- **Scope:** Backend automated tests and two Playwright browser end-to-end tests.
+- **Limitation:** Passing automated tests alone does not establish production readiness or real-world regulatory verification accuracy.
+
 ```
+

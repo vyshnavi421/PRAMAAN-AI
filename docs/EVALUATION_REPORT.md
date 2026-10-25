@@ -130,3 +130,26 @@ In strict adherence to AICTE statutory principles, PRAMAAN-AI abstains from draw
 1. **Synthetic Data Scope:** All evaluation is conducted against synthetic benchmarks with known ground truth. Real AICTE production filings may contain unanticipated document variations, stamps, or regional language headers.
 2. **Deterministic Issuer Mocks:** Statutory verification was tested against deterministic simulated adapters simulating all 6 states (`verified`, `mismatch detected`, `expired`, `verification pending`, `source unavailable`, `manual review required`). Real authority APIs may exhibit transient latency or partial schemas.
 3. **Perceptual Fingerprint Resolution:** Approximate duplicate detection uses 4-word shingling and Jaccard similarity. Documents with heavily non-textual architectural blueprints require visual CAD hash models for deep geometric similarity.
+## 5. Current QA Execution Update — 2026-10-25
+
+### Automated Test Results
+
+The following results were observed during local execution on Windows with Python 3.12.4 and pytest 9.1.1.
+
+| Test Suite | Result | Execution Time |
+|---|---|---:|
+| Backend tests | 186 passed | 6.88 seconds |
+| Browser end-to-end tests | 2 passed | 9.88 seconds |
+| Combined backend and browser suite | 188 passed, 0 failed | 13.33 seconds |
+
+**Combined command:** `python -m pytest backend/tests tests_e2e -v`
+
+### Interpretation and Limitations
+
+- The combined run verifies the currently included backend tests and two Playwright browser tests.
+- The run produced one Starlette deprecation warning concerning `httpx` and `starlette.testclient`.
+- These test results do not independently validate the benchmark metrics above; the benchmark execution timestamp remains 2026-10-23.
+- The benchmark uses synthetic application bundles. Its results should not be interpreted as proof of equivalent accuracy on real institutional documents or as regulatory approval.
+- Production readiness requires additional environment, deployment, operational, and human-review checks.
+
+

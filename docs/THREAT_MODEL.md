@@ -77,3 +77,19 @@ Where:
 2. **Sensitive Identifier Masking:** Where synthetic documents contain identifiers (e.g., synthetic Aadhaar, PAN, phone numbers), the extraction service automatically masks all but the last 4 digits (e.g., `XXXX-XXXX-4812`).
 3. **Protected Viewer Access:** The PDF evidence viewer serves document page images via authenticated backend proxies (`/documents/{id}/pages/{page}/view`). Direct, unauthenticated file URLs are never exposed.
 4. **Data Retention & Disposal:** Synthetic test dossiers can be completely purged through cascading database foreign keys and safe file removal procedures.
+---
+
+## 8. Current QA Execution Update - 2026-10-25
+
+### Automated Verification
+- The combined automated test run completed with **188 passed, 0 failed**.
+- Test scope: 186 backend tests and 2 Playwright browser end-to-end tests.
+- Command: `python -m pytest backend/tests tests_e2e -v`
+- One non-blocking Starlette deprecation warning was reported concerning `httpx` and `starlette.testclient`.
+
+### Security Verification Limitations
+- The passing test count does not mean every threat described in this document has been independently tested.
+- File-upload limits, tenant isolation, role-based access control, hash-chain tamper detection, and personal-data masking must be considered verified only to the extent covered by specific tests or manual checks.
+- HTTPS configuration, production `noexec` storage, external WORM checkpoints, and deployment-level safeguards require separate environment or deployment verification.
+- The current prototype's documented synthetic-data policy does not establish compliance with all applicable legal requirements.
+- This document describes the intended security architecture; production security approval has not been established by the automated test run alone.
