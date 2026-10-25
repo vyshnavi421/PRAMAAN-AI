@@ -141,8 +141,9 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(feedback).to_contain_text("noc_expiry_date", timeout=20000)
         expect(feedback).to_contain_text("2027-06-30", timeout=20000)
         expect(feedback).to_contain_text("97% confidence", timeout=20000)
-        expect(page.get_by_role("table", name="Application Document Inventory")).to_contain_text(
-            "fire_safety_noc_upload_test.pdf", timeout=20000
+        uploaded_row = page.locator("#cf-docs-table tr").filter(
+            has_text="fire_safety_noc_upload_test.pdf"
         )
-        expect(page.locator("#cf-docs-table")).to_contain_text("1 claim")
+        expect(uploaded_row).to_contain_text("1 claim", timeout=20000)
+        expect(uploaded_row).to_contain_text("2027-06-30")
         browser.close()
