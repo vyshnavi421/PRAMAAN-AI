@@ -8,6 +8,7 @@ import { store } from '../state.js';
 export class CaseFileView {
   constructor(container) {
     this.container = container;
+    this.pageObjectUrl = null;
   }
 
   async render() {
@@ -135,6 +136,19 @@ export class CaseFileView {
           </div>
         </div>
       </div>
+      <div id="cf-page-viewer" class="table-card" hidden style="margin-top: var(--space-5);">
+        <div class="table-toolbar">
+          <div>
+            <span style="font-weight: 700; font-size: 14px; color: var(--navy-950);">Uploaded Document — Real Page Preview</span>
+            <div style="font-size: 11px; color: var(--slate-500);">Rendered from the protected stored file; seeded demo placeholders have no uploaded binary.</div>
+          </div>
+          <button id="btn-close-page-viewer" class="btn btn-outline btn-sm" type="button">Close preview</button>
+        </div>
+        <div id="cf-page-view-status" role="status" aria-live="polite" style="padding: 12px; color: var(--slate-600);">Choose “View p. 1” on a real uploaded file.</div>
+        <div style="padding: 0 16px 16px; overflow: auto; text-align: center;">
+          <img id="cf-page-view-image" alt="Rendered page from the uploaded institutional document" hidden style="max-width: 100%; height: auto; border: 1px solid var(--slate-200); border-radius: var(--radius-md); box-shadow: var(--shadow-sm);">
+        </div>
+      </div>
     `;
 
     document.getElementById('btn-run-full-scrutiny').onclick = () => this.runPreScrutiny();
@@ -185,7 +199,10 @@ export class CaseFileView {
         const claims = Array.isArray(doc.extracted_fields) ? doc.extracted_fields : [];
         const canReextract = String(doc.storage_key || '').startsWith('storage/protected/');
         const actionButton = canReextract
-          ? `<button class="btn btn-outline btn-sm" type="button" data-extract-document="${esc(doc.id)}">Re-extract</button>`
+          ? `<div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button class="btn btn-outline btn-sm" type="button" data-view-document="${esc(doc.id)}">View p. 1</button>
+              <button class="btn btn-outline btn-sm" type="button" data-extract-document="${esc(doc.id)}">Re-extract</button>
+            </div>`
           : '<button class="btn btn-outline btn-sm" type="button" tabindex="-1">Inspect Evidence →</button>';
 
         docRows += `
@@ -233,6 +250,23 @@ export class CaseFileView {
           event.stopPropagation();
           this.extractDocument(button.dataset.extractDocument, button);
         });
+      });
+      document.querySelectorAll('#cf-docs-table [data-view-document]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.viewDocumentPage(button.dataset.viewDocument, 1, button);
+        });
+      });
+      document.getElementById('btn-close-page-viewer')?.addEventListener('click', () => {
+        const panel = document.getElementById('cf-page-viewer');
+        const image = document.getElementById('cf-page-view-image');
+        if (image) { image.removeAttribute('src'); image.hidden = true; }
+        if (panel) panel.hidden = true;
+        const status = document.getElementById('cf-page-view-status');
+        if (status) status.textContent = 'Preview closed.';
+        if (this.pageObjectUrl) URL.revokeObjectURL(this.pageObjectUrl);
+        this.pageObjectUrl = null;
       });
 
       // Check if a saved review run already exists
@@ -326,6 +360,38 @@ export class CaseFileView {
       <div style="font-size: 12px; margin-top: 4px;">Extracted claims: <strong>${fields.length}</strong></div>
       ${details}
     `;
+  }
+
+  async viewDocumentPage(documentId, pageNumber = 1, button = null) {
+    const panel = document.getElementById('cf-page-viewer');
+    const status = document.getElementById('cf-page-view-status');
+    const image = document.getElementById('cf-page-view-image');
+    if (!panel || !status || !image) return;
+
+    panel.hidden = false;
+    image.hidden = true;
+    status.textContent = 'Requesting the real stored page from the protected API…';
+    if (button) { button.disabled = true; button.textContent = 'Loading…'; }
+    try {
+      const blob = await api.getDocumentPageView(documentId, pageNumber);
+      if (!blob.type.startsWith('image/')) {
+        throw new Error('The page endpoint did not return an image.');
+      }
+      if (this.pageObjectUrl) URL.revokeObjectURL(this.pageObjectUrl);
+      this.pageObjectUrl = URL.createObjectURL(blob);
+      image.src = this.pageObjectUrl;
+      image.hidden = false;
+      status.textContent = `Page ${pageNumber} rendered from the actual uploaded document bytes.`;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      status.textContent = `Page preview unavailable: ${err.message}. This does not affect stored claims or verification status.`;
+      window.appToast.show(`Page preview unavailable: ${err.message}`, 'warning');
+    } finally {
+      if (button?.isConnected) {
+        button.disabled = false;
+        button.textContent = 'View p. 1';
+      }
+    }
   }
 
   async uploadSelectedDocument() {
