@@ -240,7 +240,7 @@ async def upload_document(
     if declared_length and declared_length.isdigit() and int(declared_length) > (
         MAX_UPLOAD_SIZE_BYTES + MULTIPART_OVERHEAD_ALLOWANCE
     ):
-        raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB limit.")
+        raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB statutory limit.")
 
     clean_filename = sanitize_filename(file.filename or "upload.bin")
 
@@ -252,7 +252,7 @@ async def upload_document(
             break
         total += len(chunk)
         if total > MAX_UPLOAD_SIZE_BYTES:
-            raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB limit.")
+            raise HTTPException(status_code=413, detail="Payload Too Large: File size exceeds 25MB statutory limit.")
         chunks.append(chunk)
     content = b"".join(chunks)
 
