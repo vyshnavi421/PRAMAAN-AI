@@ -83,7 +83,7 @@ def test_reviewer_queue_is_populated():
 
 def _make_fire_safety_pdf() -> bytes:
     """Build a tiny valid PDF carrying a real expiry-date text claim for the demo test."""
-    text = "Valid until: 2027-06-30"
+    text = "Valid until: 2024-01-14"
     escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     stream = f"BT /F1 12 Tf 50 720 Td ({escaped}) Tj ET\n".encode("ascii")
     objects = [
@@ -124,7 +124,31 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(page.locator("#health-indicator-text")).to_contain_text(
             "Backend: Operational", timeout=30000
         )
-        page.evaluate("window.appRouter.openCase('app-case-clean')")
+        page.wait_for_function(
+            "localStorage.getItem('pramaan_session_token') !== null", timeout=15000
+        )
+        application_id = page.evaluate("""async () => {
+            const token = localStorage.getItem("pramaan_session_token");
+            if (!token) throw new Error("The demo session was not initialized.");
+            const response = await fetch("/api/v1/applications", {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    institution_name: "Evidence Demo Institute",
+                    institution_id: "inst-e2e-demo-001",
+                    category: "EXTENSION_OF_APPROVAL",
+                    academic_year: "2026-2027",
+                    total_intake: 180
+                })
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.detail || ("Create application failed: " + response.status));
+            return payload.application_id;
+        }""")
+        page.evaluate("(applicationId) => window.appRouter.openCase(applicationId)", application_id)
         expect(page.locator("#cf-upload-form")).to_be_visible(timeout=20000)
 
         page.locator("#cf-upload-type").select_option("FIRE_SAFETY_NOC")
@@ -141,16 +165,27 @@ def test_real_document_upload_extracts_and_displays_source_claim():
             "Upload completed — actual backend response", timeout=20000
         )
         expect(feedback).to_contain_text("noc_expiry_date", timeout=20000)
-        expect(feedback).to_contain_text("2027-06-30", timeout=20000)
+        expect(feedback).to_contain_text("2024-01-14", timeout=20000)
         expect(feedback).to_contain_text("97% confidence", timeout=20000)
         uploaded_row = page.locator("#cf-docs-table tr").filter(
             has_text="fire_safety_noc_upload_test.pdf"
         )
         expect(uploaded_row).to_contain_text("1 claim", timeout=20000)
-        expect(uploaded_row).to_contain_text("2027-06-30")
+        expect(uploaded_row).to_contain_text("2024-01-14")
+        document_id = uploaded_row.locator("button[data-view-document]").get_attribute("data-view-document")
 
-        # Exercise the protected page-view endpoint using a real raster image so the test
-        # does not depend on Poppler being installed on the CI runner.
+        # Render the actual PDF page and prove that the normalized extraction box is drawn
+        # over it. CI installs Poppler explicitly so this check is reproducible.
+        uploaded_row.get_by_role("button", name="View p. 1").click()
+        expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
+        expect(page.locator("#cf-page-view-status")).to_contain_text(
+            "claim bounding box(es) highlighted", timeout=20000
+        )
+        expect(page.locator("#cf-page-view-overlay rect[data-field-key='noc_expiry_date']")).to_have_count(1)
+        expect(page.locator("#cf-page-view-legend")).to_contain_text("noc_expiry_date")
+        page.locator("#btn-close-page-viewer").click()
+
+        # Exercise the protected page-view endpoint for a raster image too.
         png_buffer = io.BytesIO()
         Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
         page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
@@ -163,11 +198,57 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(feedback).to_contain_text(
             "Upload completed — actual backend response", timeout=20000
         )
+        expect(feedback).to_contain_text("manual review required", timeout=20000)
         png_row = page.locator("#cf-docs-table tr").filter(has_text="scan_upload_test.png")
         expect(png_row).to_be_visible(timeout=20000)
         png_row.get_by_role("button", name="View p. 1").click()
         expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
         expect(page.locator("#cf-page-view-status")).to_contain_text(
-            "rendered from the actual uploaded document bytes"
+            "rendered from the actual uploaded bytes"
         )
+
+        # Continue the same document through the end-to-end scrutiny story:
+        # extracted evidence -> rule finding -> simulated issuer check -> human decision -> audit.
+        page.locator("#btn-run-full-scrutiny").click()
+        expect(page.locator("#studio-app-heading")).to_contain_text("APP-", timeout=45000)
+        finding = page.locator("#studio-findings-list .finding-card").filter(
+            has_text="RULE-APH-EXP-003"
+        )
+        expect(finding).to_be_visible(timeout=20000)
+        expect(finding).to_contain_text("DEFICIENCY")
+        finding.click()
+        expect(page.locator("#studio-explain-card")).to_contain_text("2024-01-14", timeout=15000)
+
+        page.locator('button[data-route="verification"]').click()
+        expect(page.locator("#select-document")).to_be_visible(timeout=20000)
+        page.locator("#select-document").select_option(document_id)
+        page.locator("#select-fixture").select_option("FIX-EXPIRED")
+        page.locator("#btn-execute-verify").click()
+        expect(page.locator("#result-status-badge")).to_have_text("EXPIRED", timeout=20000)
+        expect(page.locator(".page-header")).to_contain_text("DEMO / SIMULATED MODE")
+
+        # The issuer check is simulated. Return to the same finding and record a human decision.
+        page.locator('button[data-route="studio"]').click()
+        expect(page.locator("#studio-app-heading")).to_contain_text("APP-", timeout=20000)
+        finding = page.locator("#studio-findings-list .finding-card").filter(
+            has_text="RULE-APH-EXP-003"
+        )
+        expect(finding).to_be_visible(timeout=15000)
+        finding.click()
+        page.locator("#btn-studio-open-decision").click()
+        expect(page.locator("#decision-modal")).to_be_visible()
+        page.locator("#btn-modal-submit").click()
+        expect(page.locator("#toast-container")).to_contain_text(
+            "committed to cryptographic audit ledger", timeout=20000
+        )
+
+        page.locator('button[data-route="audit"]').click()
+        expect(page.locator("#audit-table-body")).to_contain_text(
+            "REVIEW_ACTION_CONFIRM_DEFICIENCY", timeout=20000
+        )
+        page.locator("#btn-verify-chain-now").click()
+        expect(page.locator("#chain-status-text")).to_contain_text(
+            "Cryptographic Audit Chain Intact", timeout=20000
+        )
+
         browser.close()
