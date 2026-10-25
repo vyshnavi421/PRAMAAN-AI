@@ -15,7 +15,6 @@ import subprocess
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 from pypdf import PdfReader
-from pdf2image import convert_from_bytes
 
 from app.models.enums import DocumentType, DocumentVerificationStatus, ExtractionQuality
 from app.models.domain import ExtractedField, FieldProvenance, Document
@@ -30,6 +29,9 @@ def normalize_date_string(val: str) -> str:
         except ValueError:
             continue
     return val.strip()
+
+
+MAX_OCR_PAGES = 10  # bound OCR work per upload
 
 
 class RealDocumentExtractor:
@@ -94,22 +96,81 @@ class RealDocumentExtractor:
         except Exception:
             return [], 0
 
-    def _ocr_pdf_pages(self, content_bytes: bytes) -> Tuple[List[Dict[str, Any]], int]:
-        """Run local Tesseract OCR on PDF pages and retain normalized word boxes.
+    @staticmethod
+    def count_pages(content_bytes: bytes, mime_type: str = "application/pdf") -> int:
+        """Return a PDF's page count, or one for raster images/unsupported parse cases."""
+        if mime_type != "application/pdf":
+            return 1
+        try:
+            return max(1, len(PdfReader(io.BytesIO(content_bytes)).pages))
+        except Exception:
+            return 1
 
-        If PDF rendering or OCR fails, return no pages so the caller can
-        safely route the document for manual review.
-        """
+    @staticmethod
+    def render_page_png(
+        content_bytes: bytes,
+        mime_type: str,
+        page_number: int = 1,
+        dpi: int = 110,
+    ) -> Optional[bytes]:
+        """Render a page from real stored bytes; return None if rendering is unavailable."""
+        if page_number < 1:
+            return None
+        try:
+            if mime_type in ("image/png", "image/jpeg"):
+                if page_number != 1:
+                    return None
+                from PIL import Image
+                with Image.open(io.BytesIO(content_bytes)) as image:
+                    output = io.BytesIO()
+                    image.convert("RGB").save(output, format="PNG")
+                    return output.getvalue()
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(
+                content_bytes, dpi=dpi, first_page=page_number, last_page=page_number
+            )
+            if not images:
+                return None
+            output = io.BytesIO()
+            images[0].save(output, format="PNG")
+            return output.getvalue()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _is_raster_image(content_bytes: bytes) -> bool:
+        return (
+            content_bytes.startswith(b"\\xff\\xd8\\xff")
+            or content_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+        )
+
+    def _ocr_pdf_pages(self, content_bytes: bytes) -> Tuple[List[Dict[str, Any]], int]:
+        """OCR a raster upload or at most MAX_OCR_PAGES pages of a PDF."""
         if not self.has_tesseract:
             return [], 0
 
+        is_image = self._is_raster_image(content_bytes)
+        convert_from_bytes = None
+        if not is_image:
+            try:
+                from pdf2image import convert_from_bytes
+            except ImportError:
+                return [], 0
+
         pages_data: List[Dict[str, Any]] = []
         try:
-            images = convert_from_bytes(content_bytes, dpi=200)
+            if is_image:
+                from PIL import Image
+                with Image.open(io.BytesIO(content_bytes)) as source_image:
+                    images = [source_image.convert("RGB")]
+            else:
+                images = convert_from_bytes(
+                    content_bytes, dpi=200, first_page=1, last_page=MAX_OCR_PAGES
+                )
+
             for page_number, image in enumerate(images, start=1):
                 image_buffer = io.BytesIO()
                 image.save(image_buffer, format="PNG")
-
                 result = subprocess.run(
                     ["tesseract", "stdin", "stdout", "-l", "eng", "tsv"],
                     input=image_buffer.getvalue(),
@@ -121,26 +182,21 @@ class RealDocumentExtractor:
                 if result.returncode != 0:
                     return [], 0
 
-                tsv_text = result.stdout.decode("utf-8", errors="replace")
                 words = []
                 spans = []
                 width, height = image.size
-
-                for row in csv.DictReader(io.StringIO(tsv_text), delimiter="\t"):
+                tsv_text = result.stdout.decode("utf-8", errors="replace")
+                for row in csv.DictReader(io.StringIO(tsv_text), delimiter="\\t"):
                     if row.get("level") != "5":
                         continue
                     word = (row.get("text") or "").strip()
                     if not word:
                         continue
-
                     try:
-                        x = int(row["left"])
-                        y = int(row["top"])
-                        w = int(row["width"])
-                        h = int(row["height"])
+                        x, y = int(row["left"]), int(row["top"])
+                        w, h = int(row["width"]), int(row["height"])
                     except (KeyError, TypeError, ValueError):
                         continue
-
                     words.append(word)
                     spans.append({
                         "text": word,
@@ -151,7 +207,6 @@ class RealDocumentExtractor:
                             round(max(0, min(1, (y + h) / height)), 3),
                         ],
                     })
-
                 pages_data.append({
                     "page_number": page_number,
                     "text": " ".join(words),
@@ -159,10 +214,9 @@ class RealDocumentExtractor:
                     "width": width,
                     "height": height,
                 })
-
             return pages_data, len(pages_data)
         except Exception:
-            # Includes invalid PDFs, unavailable Poppler, and OCR failures.
+            # Includes invalid images/PDFs, missing Poppler, and OCR timeouts.
             return [], 0
 
     def extract_document(
@@ -182,6 +236,8 @@ class RealDocumentExtractor:
         # Scanned PDFs: attempt OCR only when the required tools are available.
         used_ocr = False
         if len(combined_text) < 15:
+            is_pdf = content_bytes.startswith(b"%PDF-")
+            total_pdf_pages = self.count_pages(content_bytes, "application/pdf") if is_pdf else 1
             if not self.has_tesseract:
                 return [], DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
                     "No usable PDF text layer and OCR engine unavailable; manual review required."
@@ -202,10 +258,16 @@ class RealDocumentExtractor:
         # Helper to find span bbox for matched text
         def find_bbox(target_str: str) -> Tuple[int, Optional[List[float]], str]:
             target_lower = target_str.lower().strip()
-            for p in pages_data:
-                for s in p["spans"]:
-                    if target_lower in s["text"].lower() or s["text"].lower() in target_lower:
-                        return p["page_number"], s["bbox"], s["text"]
+            # Prefer exact/containing spans; ignore tiny fragments that can match arbitrary evidence.
+            for matcher in (
+                lambda text: text == target_lower,
+                lambda text: target_lower in text,
+                lambda text: len(text) >= 4 and text in target_lower,
+            ):
+                for page_data in pages_data:
+                    for span in page_data["spans"]:
+                        if matcher(span["text"].lower().strip()):
+                            return page_data["page_number"], span["bbox"], span["text"]
             # Fallback to page 1 snippet
             p1_text = pages_data[0]["text"] if pages_data else ""
             idx = p1_text.lower().find(target_lower)
@@ -303,7 +365,7 @@ class RealDocumentExtractor:
                     field_value=raw_name,
                     raw_value=raw_name,
                     data_type="STRING",
-                    confidence=0.98,
+                    confidence=0.65 if used_ocr else 0.98,
                     extraction_method=extraction_method,
                     provenance=FieldProvenance(
                         page_number=pg,
@@ -396,20 +458,12 @@ class RealDocumentExtractor:
                     )
                 ))
             else:
-                fields.append(ExtractedField(
-                    field_key="document_title",
-                    field_value=original_filename,
-                    raw_value=original_filename,
-                    data_type="STRING",
-                    confidence=0.65 if used_ocr else 0.80,
-                    extraction_method=extraction_method,
-                    provenance=FieldProvenance(
-                        page_number=1,
-                        bounding_box=None,
-                        surrounding_snippet=f"File: {original_filename}",
-                        quality_label=ExtractionQuality.MEDIUM
-                    )
-                ))
+                # Readable text with no supported claim is not evidence. Do not invent a
+                # document_title from the filename; abstain and route it for manual review.
+                return [], DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
+                    "Text was readable but no recognisable fields were found for this document type; "
+                    "manual review required."
+                )
 
         if used_ocr:
             return fields, DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED, (
