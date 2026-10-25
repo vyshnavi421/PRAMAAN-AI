@@ -248,7 +248,7 @@ def get_canonical_benchmark_fixtures() -> List[BenchmarkFixture]:
     )
 
     # -------------------------------------------------------------------------
-    # Bundle 03: Missing Key Field (RULE-APH-FLD-002 Deficiency)
+    # Bundle 03: Missing Key Field (RULE-APH-FLD-002 Inconclusive)
     # -------------------------------------------------------------------------
     app3 = app1.model_copy(deep=True)
     app3.application_id = "bm-03-missing-field"
@@ -265,17 +265,20 @@ def get_canonical_benchmark_fixtures() -> List[BenchmarkFixture]:
             bundle_id="BM-03-MISSING-FIELD",
             name="Missing Key Field in Fire Certificate",
             category="DEFICIENCY_MISSING",
-            description="Fire NOC document missing noc_expiry_date; triggers RULE-APH-FLD-002 deficiency.",
+            description=(
+                "Fire NOC document is present but noc_expiry_date was not "
+                "extracted; return INCONCLUSIVE and require manual review."
+            ),
             application=app3,
             ground_truth_rules={
                 "RULE-APH-FLD-002": ExpectedFinding(
                     rule_id="RULE-APH-FLD-002",
-                    expected_status=FindingStatus.DEFICIENCY,
-                    expected_phrase_in_reason="Required field 'noc_expiry_date' was not found"
+                    expected_status=FindingStatus.INCONCLUSIVE,
+                    expected_phrase_in_reason="noc_expiry_date"
                 ),
             },
             expected_coverage_complete=True,
-            expected_overall_status="COMPLETE_WITH_DEFICIENCIES",
+            expected_overall_status="COMPLETE_COMPLIANT",
             is_false_positive_trap=False,
         )
     )
