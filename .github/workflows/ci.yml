@@ -42,6 +42,11 @@ jobs:
         run: python -m compileall -q backend/app backend/tests
       - name: Run backend API, security, regression, and benchmark tests
         run: python -m pytest backend/tests -q
+      - name: Report measured extraction on 30 labelled synthetic PDFs
+        if: matrix.python-version == '3.13'
+        run: |
+          python backend/evaluate_document_extraction.py --report-path "$RUNNER_TEMP/EXTRACTION_EVALUATION.md"
+          cat "$RUNNER_TEMP/EXTRACTION_EVALUATION.md"
 
   frontend-syntax:
     name: Frontend ES-module syntax
