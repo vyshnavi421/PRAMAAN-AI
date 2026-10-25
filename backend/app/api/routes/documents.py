@@ -1,74 +1,119 @@
+
 """
 PRAMAAN-AI Protected Documents & Secure Ingestion API Routes
-Enforces strict server-side authorization and threat mitigation per docs/THREAT_MODEL.md:
-1. Insecure Direct Object Reference (IDOR) prevention: Institution users can only access their own documents.
-2. File Upload Validation:
-   - 25MB file size limit (HTTP 413)
-   - Magic byte header inspection (%PDF-, JPEG, PNG; rejects executables, SVG, HTML)
-   - Path traversal immunity: client filename completely sanitized via os.path.basename & regex
-   - Internal UUID storage keys
-   - SHA-256 integrity calculation
-3. Sensitive access auditing: every document read appends to the immutable audit trail.
+
+Security controls:
+1. Institution-level document access authorization.
+2. Upload size limit of 25 MB.
+3. Allowed extensions: PDF, JPEG, PNG.
+4. Magic-byte validation and extension/MIME consistency.
+5. Filename sanitization and internal UUID storage keys.
+6. SHA-256 integrity calculation.
+7. Audit events for document access and uploads.
+8. Document-type content validation before storage.
 """
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Path, Depends, UploadFile, File, Form, Response
-from pydantic import BaseModel, Field
+
+from typing import Optional
 import os
 import re
 import uuid
 import hashlib
 
-from app.models.enums import DocumentType, DocumentVerificationStatus, ExtractionQuality
-from app.models.domain import Document, ApplicationInput, ExtractedField, FieldProvenance
-from app.core.auth import get_current_user, require_roles, UserRole, UserContext
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Path,
+    Depends,
+    UploadFile,
+    File,
+    Form,
+    Response,
+)
+
+from app.models.enums import (
+    DocumentType,
+    DocumentVerificationStatus,
+)
+from app.models.domain import Document, ApplicationInput
+from app.core.auth import (
+    get_current_user,
+    require_roles,
+    UserRole,
+    UserContext,
+)
 from app.services.application_service import global_application_service
 from app.services.audit_service import global_audit_service
 from app.services.document_storage import global_document_storage
-from app.services.document_extractor import global_document_extractor
+from app.services.document_extractor import (
+    global_document_extractor,
+    DocumentTypeMismatchError,
+)
 
 
-router = APIRouter(prefix="", tags=["Protected Documents & Secure Upload"])
+router = APIRouter(
+    prefix="",
+    tags=["Protected Documents & Secure Upload"],
+)
 
-# Constants from docs/THREAT_MODEL.md
-MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
-ALLOWED_MAGIC_SIGNATURES = {
-    b"%PDF-": "application/pdf",
-    b"\xff\xd8\xff": "image/jpeg",
-    b"\x89PNG\r\n\x1a\n": "image/png"
+
+# Upload policy
+MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024
+
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".jpg",
+    ".jpeg",
+    ".png",
 }
-# Only these roles may add or re-extract documents (AUDITOR / RULES_ADMIN are read-only here).
-WRITE_ROLES = [UserRole.INSTITUTION_USER, UserRole.REVIEWER]
-DISALLOWED_EXTENSIONS = {".exe", ".bat", ".cmd", ".sh", ".py", ".js", ".svg", ".html", ".htm", ".vbs", ".dll"}
+
+ALLOWED_MAGIC_SIGNATURES = {
+    b"%PDF-": ("application/pdf", {".pdf"}),
+    b"\xff\xd8\xff": ("image/jpeg", {".jpg", ".jpeg"}),
+    b"\x89PNG\r\n\x1a\n": ("image/png", {".png"}),
+}
+
+WRITE_ROLES = [
+    UserRole.INSTITUTION_USER,
+    UserRole.REVIEWER,
+]
 
 
 def sanitize_filename(filename: str) -> str:
-    """
-    Strips directory traversal sequences, path separators, and special characters.
-    Handles both POSIX and Windows separators across all hosting environments.
-    """
+    """Remove directory components and unsafe filename characters."""
+
     normalized = filename.replace("\\", "/")
     clean = os.path.basename(normalized)
-    clean = re.sub(r"[^\w\.\-]", "_", clean)
+    clean = re.sub(r"[^A-Za-z0-9_.-]", "_", clean)
     clean = re.sub(r"\.{2,}", "_", clean)
+    clean = clean.strip("._")
+
     return clean or f"document_{uuid.uuid4().hex[:8]}.pdf"
 
 
-def verify_document_ownership(current_user: UserContext, document_id: str) -> tuple[ApplicationInput, Document]:
-    """
-    Locates document across applications and enforces strict institutional tenant boundary.
-    """
+def verify_document_ownership(
+    current_user: UserContext,
+    document_id: str,
+) -> tuple[ApplicationInput, Document]:
+    """Find a document and enforce institution-level access restrictions."""
+
     found = global_application_service.find_document(document_id)
+
     if not found:
-        raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Document '{document_id}' not found.",
+        )
 
     app, doc = found
 
-    # IDOR Check for Institution Users
     if current_user.role == UserRole.INSTITUTION_USER:
-        if current_user.institution_id and app.institution_id != current_user.institution_id:
+        if (
+            current_user.institution_id
+            and app.institution_id != current_user.institution_id
+        ):
             raise HTTPException(
                 status_code=403,
-                detail=f"Forbidden: You are not authorized to access documents belonging to institution '{app.institution_id}'."
+                detail="Forbidden: You are not authorized to access this document.",
             )
 
     return app, doc
@@ -76,39 +121,36 @@ def verify_document_ownership(current_user: UserContext, document_id: str) -> tu
 
 @router.get(
     "/documents/retention-policy",
-    summary="Statutory data retention & disposal specifications"
+    summary="Statutory data retention and disposal specifications",
 )
 def get_retention_policy():
-    """
-    Returns data retention, purging, and privacy specifications under DPDP Act 2023.
-    """
+    """Return the prototype's data retention policy."""
+
     return {
         "framework": "Digital Personal Data Protection (DPDP) Act 2023 & AICTE Guidelines",
         "demo_mode": True,
         "policy": (
-            "In this prototype demonstration, synthetic dossiers are retained in protected storage "
-            "for evaluation. In production deployment, dossiers are subject to 7-year statutory retention "
-            "following approval decisions, with cryptographic purge certificates issued upon authorized record retirement."
+            "In this prototype demonstration, synthetic dossiers are retained "
+            "in protected storage for evaluation. Production retention and "
+            "disposal must follow applicable legal and institutional requirements."
         ),
-        "threat_model_reference": "docs/THREAT_MODEL.md Section 4"
+        "threat_model_reference": "docs/THREAT_MODEL.md Section 4",
     }
 
 
 @router.get(
     "/documents/{document_id}",
     response_model=Document,
-    summary="Get protected document metadata & extracted claims (RBAC Enforced)"
+    summary="Get protected document metadata",
 )
 def get_document(
     document_id: str = Path(..., description="Document UUID"),
-    current_user: UserContext = Depends(get_current_user)
+    current_user: UserContext = Depends(get_current_user),
 ):
-    """
-    Returns document entity. Enforces institutional scoping and logs an audit access event.
-    """
+    """Return document metadata and record the access event."""
+
     app, doc = verify_document_ownership(current_user, document_id)
 
-    # Record sensitive access in audit ledger
     global_audit_service.record_event(
         actor_id=current_user.user_id,
         event_type="DOCUMENT_ACCESSED",
@@ -117,10 +159,11 @@ def get_document(
             "filename": doc.original_filename,
             "document_type": doc.document_type.value,
             "actor_role": current_user.role.value,
-            "institution_id": app.institution_id
+            "institution_id": app.institution_id,
         },
-        application_id=app.application_id
+        application_id=app.application_id,
     )
+
     global_application_service.persist()
 
     return doc
@@ -128,29 +171,34 @@ def get_document(
 
 @router.get(
     "/documents/{document_id}/content",
-    summary="Get protected document binary content stream (RBAC Enforced)"
+    summary="Get protected document binary content",
 )
 def get_document_content(
     document_id: str = Path(..., description="Document UUID"),
-    current_user: UserContext = Depends(get_current_user)
+    current_user: UserContext = Depends(get_current_user),
 ):
-    """
-    Returns document file content. IDOR protected; never exposes server-side filesystem paths.
-    Returns the exact uploaded bytes stored securely on disk.
-    """
-    app, doc = verify_document_ownership(current_user, document_id)
+    """Return document bytes after checking authorization."""
 
-    content_bytes = global_document_storage.get_document_bytes(doc.storage_key, doc.id)
+    _, doc = verify_document_ownership(current_user, document_id)
+
+    content_bytes = global_document_storage.get_document_bytes(
+        doc.storage_key,
+        doc.id,
+    )
+
     if not content_bytes:
-        raise HTTPException(status_code=404, detail=f"Protected document bytes for '{document_id}' not found.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Protected document bytes for '{document_id}' not found.",
+        )
 
     return Response(
         content=content_bytes,
-        media_type=doc.mime_type or "application/pdf",
+        media_type=doc.mime_type or "application/octet-stream",
         headers={
             "Content-Disposition": f'inline; filename="{doc.original_filename}"',
-            "X-Content-Type-Options": "nosniff"
-        }
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -158,86 +206,170 @@ def get_document_content(
     "/documents/upload",
     response_model=Document,
     status_code=201,
-    summary="Secure Document Intake with Magic Byte & Size Validation"
+    summary="Secure document upload with file validation",
 )
 async def upload_document(
-    file: UploadFile = File(..., description="File to upload (PDF, JPEG, PNG <= 25MB)"),
+    file: UploadFile = File(
+        ...,
+        description="PDF, JPEG, or PNG file up to 25 MB",
+    ),
     document_type: str = Form(..., description="DocumentType enum string"),
     application_id: str = Form(..., description="Application UUID"),
-    current_user: UserContext = Depends(require_roles(WRITE_ROLES))
+    current_user: UserContext = Depends(require_roles(WRITE_ROLES)),
 ):
     """
-    Validates uploaded file against STRIDE threat model:
-    - Rejects files exceeding 25MB (HTTP 413)
-    - Rejects disallowed extensions and mismatching magic bytes (HTTP 400)
-    - Strips client-supplied paths to prevent directory traversal
-    - Stores file with internal UUID key and SHA-256 hash
+    Validate the upload before storage:
+    - Allow only PDF, JPEG, and PNG extensions.
+    - Match the extension against the detected file signature.
+    - Reject files larger than 25 MB.
+    - Check readable document contents against the selected type.
+    - Store using an internal UUID and calculate SHA-256.
     """
+
+    # 1. Verify that the application exists.
     app = global_application_service.get_application(application_id)
+
     if not app:
-        raise HTTPException(status_code=404, detail=f"Application '{application_id}' not found.")
-
-    # Institutional tenancy check
-    if current_user.role == UserRole.INSTITUTION_USER:
-        if current_user.institution_id and app.institution_id != current_user.institution_id:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Forbidden: You cannot upload documents to another institution's dossier."
-            )
-
-    # 1. Filename sanitization & Extension check
-    raw_filename = file.filename or "upload.bin"
-    clean_filename = sanitize_filename(raw_filename)
-    ext = os.path.splitext(clean_filename)[1].lower()
-    if ext in DISALLOWED_EXTENSIONS:
         raise HTTPException(
-            status_code=400,
-            detail=f"Security Violation: Extension '{ext}' is prohibited by file upload policy."
+            status_code=404,
+            detail=f"Application '{application_id}' not found.",
         )
 
-    # 2. Read bytes with size cap
-    content = await file.read()
+    # 2. Enforce institution-level upload authorization.
+    if current_user.role == UserRole.INSTITUTION_USER:
+        if (
+            current_user.institution_id
+            and app.institution_id != current_user.institution_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: You cannot upload to another institution's dossier.",
+            )
+
+    # 3. Sanitize the filename and check the extension.
+    raw_filename = file.filename or ""
+    clean_filename = sanitize_filename(raw_filename)
+    ext = os.path.splitext(clean_filename)[1].lower()
+
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file extension '{ext}'. "
+                "Only PDF, JPG, JPEG, and PNG files are allowed."
+            ),
+        )
+
+    # 4. Read no more than one byte beyond the size limit.
+    content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"Payload Too Large: File size {len(content)} bytes exceeds 25MB statutory limit."
+            detail="File exceeds the maximum allowed size of 25 MB.",
         )
 
-    # 3. Magic byte header inspection
-    is_valid_magic = False
-    detected_mime = "application/octet-stream"
-    for magic_prefix, mime in ALLOWED_MAGIC_SIGNATURES.items():
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file is empty.",
+        )
+
+    # 5. Check the file signature against the extension.
+    detected_mime = None
+
+    for magic_prefix, (mime, valid_extensions) in ALLOWED_MAGIC_SIGNATURES.items():
         if content.startswith(magic_prefix):
-            is_valid_magic = True
+            if ext not in valid_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"The file extension '{ext}' does not match "
+                        f"the detected format '{mime}'."
+                    ),
+                )
+
             detected_mime = mime
             break
 
-    if not is_valid_magic:
+    if detected_mime is None:
         raise HTTPException(
             status_code=400,
-            detail="Security Violation: File header magic bytes do not match an allowed format (PDF, JPEG, PNG)."
+            detail=(
+                "Invalid file content. Only PDF, JPEG, and PNG "
+                "file signatures are accepted."
+            ),
         )
 
-    # 4. Validate document type BEFORE anything is written
+    # 6. Validate the selected document type.
     try:
         doc_type_enum = DocumentType(document_type)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid DocumentType '{document_type}'.")
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid DocumentType '{document_type}'.",
+        ) from exc
 
-    # 5. Store bytes, then record metadata. Any failure rolls back both the file and the metadata.
+    # 7. Validate actual contents BEFORE storing the upload.
+    #
+    # The current document extractor performs text extraction/OCR and raises
+    # DocumentTypeMismatchError when readable content does not match the
+    # selected document type.
+    #
+    # This extractor currently processes PDFs. Do not pass JPEG/PNG bytes
+    # into the PDF parser: route image uploads for manual review unless your
+    # extractor has a dedicated image OCR path.
+    if detected_mime == "application/pdf":
+        try:
+            extracted_fields, initial_status, note = (
+                global_document_extractor.extract_document(
+                    content_bytes=content,
+                    doc_type=doc_type_enum,
+                    original_filename=clean_filename,
+                )
+            )
+        except DocumentTypeMismatchError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "The PDF could not be validated. Please upload a valid "
+                    "PDF document or submit it for manual review."
+                ),
+            ) from exc
+    else:
+        # The supplied extractor uses pypdf and is PDF-only. Avoid trying to
+        # parse an image as a PDF. Images need a separate image OCR validator.
+        extracted_fields = []
+        initial_status = DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED
+        note = (
+            "Image uploaded successfully, but document-type validation "
+            "requires an image OCR pipeline; manual review is required."
+        )
+
+    # 8. Prepare identifiers and the integrity hash only after validation.
     doc_uuid = str(uuid.uuid4())
     sha256_hash = hashlib.sha256(content).hexdigest()
-    logical_storage_key = f"storage/protected/{app.institution_id}/{doc_uuid}.bin"
-    new_doc: Optional[Document] = None
-    try:
-        global_document_storage.store_document(app.institution_id, doc_uuid, content)
 
-        # Extract real fields from uploaded content bytes
-        extracted_fields, initial_status, note = global_document_extractor.extract_document(
-            content_bytes=content,
-            doc_type=doc_type_enum,
-            original_filename=clean_filename
+    logical_storage_key = (
+        f"storage/protected/{app.institution_id}/{doc_uuid}.bin"
+    )
+
+    new_doc: Optional[Document] = None
+    storage_written = False
+
+    # 9. Store bytes, persist metadata, and audit the upload.
+    try:
+        global_document_storage.store_document(
+            app.institution_id,
+            doc_uuid,
+            content,
         )
+        storage_written = True
 
         new_doc = Document(
             id=doc_uuid,
@@ -249,14 +381,12 @@ async def upload_document(
             mime_type=detected_mime,
             sha256_hash=sha256_hash,
             verification_status=initial_status,
-            extracted_fields=extracted_fields
+            extracted_fields=extracted_fields,
         )
 
-        # Append to application
         app.documents.append(new_doc)
         global_application_service.persist()
 
-        # Record in audit trail
         global_audit_service.record_event(
             actor_id=current_user.user_id,
             event_type="DOCUMENT_UPLOADED",
@@ -268,18 +398,29 @@ async def upload_document(
                 "document_type": doc_type_enum.value,
                 "mime_type": detected_mime,
                 "fields_extracted": len(extracted_fields),
-                "extraction_note": note
+                "extraction_note": note,
             },
-            application_id=application_id
+            application_id=application_id,
         )
-    except BaseException:
+
+    except Exception:
         if new_doc is not None and new_doc in app.documents:
             app.documents.remove(new_doc)
+
             try:
                 global_application_service.persist()
             except Exception:
-                pass  # in-memory state is already rolled back; do not mask the original error
-        global_document_storage.delete_document(app.institution_id, doc_uuid)
+                pass
+
+        if storage_written:
+            try:
+                global_document_storage.delete_document(
+                    app.institution_id,
+                    doc_uuid,
+                )
+            except Exception:
+                pass
+
         raise
 
     return new_doc
@@ -288,52 +429,72 @@ async def upload_document(
 @router.post(
     "/documents/{document_id}/extract",
     response_model=Document,
-    summary="Trigger Automated Document Extraction/OCR Pipeline (RBAC Enforced)"
+    summary="Trigger document extraction/OCR pipeline",
 )
 def extract_document_fields(
     document_id: str = Path(..., description="Document UUID"),
-    current_user: UserContext = Depends(require_roles(WRITE_ROLES))
+    current_user: UserContext = Depends(require_roles(WRITE_ROLES)),
 ):
-    """
-    Executes real text extraction and OCR fallback on actual stored document bytes.
-    Extracts traceable fields with bounding boxes, confidence scores, and provenance.
-    If document text is unreadable and OCR is unavailable, honestly abstains and routes to manual review.
+    """Re-extract fields from a stored document."""
 
-    Existing fields are never overwritten by a failed/empty re-extraction. Seeded demo documents
-    have no stored binary, so they are refused (409); a real upload whose bytes are missing is 404.
-    """
     app, doc = verify_document_ownership(current_user, document_id)
 
     if global_document_storage.is_demo_seed_key(doc.storage_key):
         raise HTTPException(
             status_code=409,
-            detail="Seeded demo documents have no stored binary; extraction is not available for them."
+            detail=(
+                "Seeded demo documents have no stored binary; "
+                "extraction is unavailable."
+            ),
         )
 
-    content_bytes = global_document_storage.get_document_bytes(doc.storage_key, doc.id)
+    content_bytes = global_document_storage.get_document_bytes(
+        doc.storage_key,
+        doc.id,
+    )
+
     if not content_bytes:
-        raise HTTPException(status_code=404, detail=f"Protected document bytes for '{document_id}' not found.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Protected document bytes for '{document_id}' not found.",
+        )
 
     try:
-        extracted, rec_status, note = global_document_extractor.extract_document(
-            content_bytes=content_bytes,
-            doc_type=doc.document_type,
-            original_filename=doc.original_filename
+        extracted, rec_status, note = (
+            global_document_extractor.extract_document(
+                content_bytes=content_bytes,
+                doc_type=doc.document_type,
+                original_filename=doc.original_filename,
+            )
         )
-    except Exception:
-        raise HTTPException(status_code=500, detail="Extraction failed; the document was left unchanged.")
+    except DocumentTypeMismatchError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Extraction failed; the document was left unchanged.",
+        ) from exc
 
     if extracted:
         doc.extracted_fields = extracted
+
         if rec_status == DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED:
             doc.verification_status = rec_status
+
         global_application_service.persist()
-    elif doc.extracted_fields:
-        note = f"Re-extraction produced no fields; existing fields preserved. ({note})"
-    else:
+
+    elif not doc.extracted_fields:
         if rec_status == DocumentVerificationStatus.MANUAL_REVIEW_REQUIRED:
             doc.verification_status = rec_status
             global_application_service.persist()
+    else:
+        note = (
+            "Re-extraction produced no fields; existing fields preserved. "
+            f"({note})"
+        )
 
     global_audit_service.record_event(
         actor_id=current_user.user_id,
@@ -343,9 +504,9 @@ def extract_document_fields(
             "fields_extracted": len(doc.extracted_fields),
             "document_type": doc.document_type.value,
             "status": doc.verification_status.value,
-            "note": note
+            "note": note,
         },
-        application_id=app.application_id
+        application_id=app.application_id,
     )
 
     return doc
