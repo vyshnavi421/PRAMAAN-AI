@@ -21,7 +21,7 @@
 
 ### Scene 1: Intake & Automated Complete Pre-Scrutiny (0:00 – 0:45)
 - **Narrative:**  
-  *"Good morning judges. Every year, AICTE scrutiny committees manually verify thousands of voluminous institutional dossiers across land titles, fire safety NOCs, architect certificates, and trust resolutions. Today we present PRAMAAN-AI, an evidence-backed decision support system that transforms a 45-minute manual review into a 1.13 millisecond deterministic pre-scrutiny with 100% check accounting."*
+  *"Good morning judges. PRAMAAN-AI is an evidence-first pre-scrutiny decision-support prototype for AICTE approval applications. It combines document parsing, configurable deterministic checks, cross-document comparisons, a coverage auditor, and traceable findings. Our benchmark uses synthetic dossiers; issuing-authority responses are simulated, and the system does not replace official scrutiny or final human decisions."*
 - **Initial Setup:** On browser, select tab `Dossier Case File` (or route `case-file`), active bundle: `APP-2026-EOA-101 (Apex Institute of Technology)`.
 - **Click Path:**
   1. Click top navigation tab: **Case File** (`data-route="case-file"`).
@@ -144,10 +144,8 @@
 
 ### Scene 7: Empirical Benchmark & Concluding Statement (4:15 – 4:45)
 - **Narrative:**  
-  *"To prove our system’s robustness before deploying to real evaluation, we ran PRAMAAN-AI through a 15-bundle synthetic benchmark covering clean files, expired certificates, conflicting land surveys, spelling abbreviations, poor scans, and deliberate check omissions.  
-  The results: 100% extraction F1, 100% rule precision, zero false alarms, 99.52% overall check coverage with 100% omission detection, and an average processing time of 1.13 milliseconds per application.  
-  PRAMAAN-AI is not a black-box replacement for statutory scrutiny—it is a high-speed, traceable, decision-support co-pilot for AICTE officers. Thank you, and we welcome your questions."*
-- **Visual:** Display terminal benchmark output from `python run_benchmark.py` or open [`docs/EVALUATION_REPORT.md`](file:///c:/Users/Anwar%20Jehan%20Begum/OneDrive/Desktop/pramaan-ai/docs/EVALUATION_REPORT.md).
+  *"We evaluate PRAMAAN-AI with 15 labelled synthetic bundles, including clean cases, expired certificates, conflicting fields, duplicate reuse, poor scans, source outages, and deliberate check omissions. The benchmark report records extraction and rule metrics, coverage accounting, and backend orchestration latency. These are measurements on a small synthetic fixture set—not production accuracy estimates or a measurement of the full human review process. Issuer-registry responses are simulated; live AICTE and issuing-authority integrations are not connected. PRAMAAN-AI remains a traceable decision-support copilot, with official scrutiny and final decisions retained by authorized people."*
+- **Visual:** From the repository root, run `python backend/run_benchmark.py` immediately before recording. Show the newly generated `docs/EVALUATION_REPORT.md`; quote only the values and timestamp from that run, and explicitly label them as synthetic-fixture measurements. Avoid comparing backend milliseconds directly with end-to-end manual review time.
 
 ---
 
