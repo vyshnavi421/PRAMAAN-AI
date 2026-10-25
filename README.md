@@ -2,6 +2,7 @@
 ### Evidence-First Validation Copilot for AICTE Approvals
 
 [![Quality Gates](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml)
+
 **Smart India Hackathon — Problem Statement ID: SIH26261**  
 **Theme:** Smart Automation | **Category:** Software | **Organization:** All India Council for Technical Education (AICTE), Ministry of Education, Government of India  
 **System Classification:** Prototype Decision-Support System (*Non-Autonomous Pre-Scrutiny Copilot*)
@@ -299,7 +300,7 @@ pramaan-ai/
 
 ### Prerequisites
 - **Python**: `3.11`, `3.12`, or `3.13` (Tested and verified on Python 3.13.5).
-- **Node.js** *(Optional)*: Version 18+ (used strictly for running static syntax checks with `node --check`).
+- **Node.js** *(Optional)*: Version 22+ for local frontend syntax checks; GitHub Actions validates every browser ES module automatically.
 - **Tesseract OCR** *(Optional)*: Required only if testing local OCR on scanned raster PDFs without text layers. If omitted, the system honestly falls back to `manual review required`.
 - **Operating System**: Windows 10/11, Ubuntu 22.04+, or macOS Sonoma+.
 
