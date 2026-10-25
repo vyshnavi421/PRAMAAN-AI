@@ -43,13 +43,16 @@ All API endpoints follow predictable HTTP status codes and return standardized e
 | `/applications/{id}` | GET | `institution_user` (owner), `reviewer`, `auditor` | Yes |
 | `/documents/upload` | POST | `institution_user` (owner), `reviewer` | Yes |
 | `/documents/{id}` | GET | Authenticated user; institution users are owner-scoped | Yes |
-| `/documents/{id}/content` | GET | Authenticated user; institution users are owner-scoped | Yes |\n| `/documents/{id}/pages/{page}/view` | GET | Authenticated user; institution users are owner-scoped | Yes |\n| `/documents/{id}/extract` | POST | `institution_user` (owner), `reviewer` | Yes |
+| `/documents/{id}/content` | GET | Authenticated user; institution users are owner-scoped | Yes |
+| `/documents/{id}/pages/{page}/view` | GET | Authenticated user; institution users are owner-scoped | Yes |
+| `/documents/{id}/extract` | POST | `institution_user` (owner), `reviewer` | Yes |
 | `/applications/{id}/validation-runs` | POST | `institution_user` (owner), `reviewer` | Yes |
 | `/applications/{id}/validation-runs` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
 | `/findings/{id}` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
 | `/findings/{id}/review-actions` | POST | `reviewer` | Yes |
 | `/applications/{id}/evidence-graph` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
-| `/documents/{id}/verify` | POST | `reviewer`, `rules_admin`, `institution_user` (owner-scoped) | Yes |\n| `/documents/{id}/verification-attempts` | GET | Authenticated user; institution users are owner-scoped | Implementation-specific |
+| `/documents/{id}/verify` | POST | `reviewer`, `rules_admin`, `institution_user` (owner-scoped) | Yes |
+| `/documents/{id}/verification-attempts` | GET | Authenticated user; institution users are owner-scoped | Implementation-specific |
 | `/applications/{id}/duplicates` | GET | `reviewer`, `auditor` | No |
 | `/applications/{id}/compare-previous` | POST | `reviewer`, `auditor` | Yes |
 | `/rule-packs` | GET | `reviewer`, `rules_admin`, `auditor` | No |
@@ -288,38 +291,32 @@ Verification uses the repository's configured simulated adapters; it does not co
 
 ---
 
-### 3.6 Verification Ladder (External Issuer Adapters)
+### 3.6 Verification Ladder (Issuer Adapter Simulation)
 
-#### `POST /documents/{document_id}/verification-attempts`
-- **Description:** Execute simulated/authorized issuer check returning exactly one of the 6 official states.
-- **Request Body:**
+All issuer responses in this prototype are simulated. These endpoints do not connect to live AICTE or government portals.
+
+#### `POST /documents/{document_id}/verify`
+- **Authorization:** `reviewer`, `rules_admin`, or the owning `institution_user`. Document access is checked before verification.
+- **Required request fields:** `adapter_id`, `method`, `reference_id`, and `max_retries` (1–5). Optional fields include `simulate_retry` and `context`.
+- **Behavior:** records a verification attempt using the configured adapter and returns a `VerificationAttemptRecord`. The actual adapter IDs can be obtained from `GET /verification/adapters`.
+- This is a simulated adapter workflow, not a live issuer integration.
+
+Example request (use an actual adapter ID returned by the API):
 ```json
 {
-  "adapter_name": "SIMULATED_STATE_FIRE_SERVICE_ADAPTER",
-  "request_reference": "NOC-FS-2023-8891"
-}
-```
-- **Response 200 OK:**
-```json
-{
-  "id": "att-9988-7766-5544-33221100aabb",
-  "document_id": "d1e2f3a4-5555-6666-7777-888899990000",
-  "adapter_name": "SIMULATED_STATE_FIRE_SERVICE_ADAPTER",
-  "is_simulated": true,
-  "request_reference": "NOC-FS-2023-8891",
-  "status": "expired",
-  "response_payload": {
-    "issuer": "State Fire & Emergency Services",
-    "issued_to": "Apex Institute of Technology",
-    "valid_until": "2024-01-14",
-    "renewal_applied": false,
-    "simulation_note": "DEMO DATA: Simulated response reflecting expired status"
-  },
-  "attempted_at": "2026-10-23T11:15:00.000Z"
+  "adapter_id": "<adapter-id-from-verification-adapters>",
+  "method": "ISSUER_REGISTRY",
+  "reference_id": "SYNTHETIC-NOC-REF-001",
+  "max_retries": 3,
+  "simulate_retry": false,
+  "context": {}
 }
 ```
 
----
+#### `GET /documents/{document_id}/verification-attempts`
+- **Authorization:** any authenticated user who may access the document; institution users are owner-scoped.
+- **Description:** returns the chronological verification-attempt history for that document.
+- **Response:** a list of `VerificationAttemptRecord` values. See `backend/app/api/routes/verification.py` for the canonical response model.
 
 ### 3.7 Scrutiny Actions & Hash-Chained Audit
 
