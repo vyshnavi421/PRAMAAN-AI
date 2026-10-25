@@ -149,8 +149,18 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(uploaded_row).to_contain_text("1 claim", timeout=20000)
         expect(uploaded_row).to_contain_text("2027-06-30")
 
-        # Exercise the protected page-view endpoint using a real raster image so the test
-        # does not depend on Poppler being installed on the CI runner.
+        # Render the actual PDF page and prove that the normalized extraction box is drawn
+        # over it. CI installs Poppler explicitly so this check is reproducible.
+        uploaded_row.get_by_role("button", name="View p. 1").click()
+        expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
+        expect(page.locator("#cf-page-view-status")).to_contain_text(
+            "claim bounding box(es) highlighted", timeout=20000
+        )
+        expect(page.locator("#cf-page-view-overlay rect[data-field-key='noc_expiry_date']")).to_have_count(1)
+        expect(page.locator("#cf-page-view-legend")).to_contain_text("noc_expiry_date")
+        page.locator("#btn-close-page-viewer").click()
+
+        # Exercise the protected page-view endpoint for a raster image too.
         png_buffer = io.BytesIO()
         Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
         page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
