@@ -41,10 +41,10 @@ def validate_upload(clean_filename: str, content: bytes) -> Tuple[Optional[str],
         return None, "Uploaded file is empty."
     ext = os.path.splitext(clean_filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        return None, "Unsupported file extension. Allowed: .pdf, .jpg, .jpeg, .png."
+        return None, f"Extension '{ext}' is prohibited by file upload policy. Allowed extensions: .pdf, .jpg, .jpeg, .png."
     detected = detect_mime(content)
     if detected is None:
-        return None, "File signature does not match an allowed format (PDF, JPEG, PNG)."
+        return None, "File magic bytes do not match an allowed format (PDF, JPEG, PNG)."
     if ALLOWED_EXTENSIONS[ext] != detected:
         return None, (
             f"File extension '{ext}' does not match the detected content type ({detected}); upload rejected."
