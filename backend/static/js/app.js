@@ -132,12 +132,16 @@ class AppRouter {
   }
 
   async init() {
+    const roleSelect = document.getElementById('role-select');
+    if (roleSelect) {
+      roleSelect.disabled = true;
+    }
+
     this.bindEvents();
     this.bindKeyboardShortcuts();
 
     const health = await this.checkBackendHealth();
     const demoModeEnabled = health?.data?.is_demo_mode === true;
-    const roleSelect = document.getElementById('role-select');
 
     if (roleSelect) {
       roleSelect.disabled = !demoModeEnabled;
@@ -228,6 +232,8 @@ class AppRouter {
     const roleSelect = document.getElementById('role-select');
     if (roleSelect) {
       roleSelect.onchange = async (e) => {
+        if (roleSelect.disabled) return;
+
         const roleUserMap = {
           'reviewer': 'usr-officer-01',
           'institution_user': 'usr-inst-apex',
