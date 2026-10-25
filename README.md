@@ -1,5 +1,7 @@
 # PRAMAAN-AI (प्रमाण-AI)
 ### Evidence-First Validation Copilot for AICTE Approvals
+
+[![Quality Gates](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml)
 **Smart India Hackathon — Problem Statement ID: SIH26261**  
 **Theme:** Smart Automation | **Category:** Software | **Organization:** All India Council for Technical Education (AICTE), Ministry of Education, Government of India  
 **System Classification:** Prototype Decision-Support System (*Non-Autonomous Pre-Scrutiny Copilot*)
@@ -265,7 +267,7 @@ pramaan-ai/
 │   ├── storage/
 │   │   └── protected/               # Tenant-isolated disk storage for uploaded file bytes
 │   │
-│   └── tests/                       # Automated Pytest suite (135 collected tests)
+│   └── tests/                       # Backend regression and demo smoke tests
 │       ├── test_applications_and_audit.py
 │       ├── test_auth_and_audit_security.py
 │       ├── test_auth_session_regression.py
@@ -450,39 +452,32 @@ Set `PRAMAAN_DATA_DIR` (e.g. `./run.sh` sets `data`) to persist applications (`a
 
 ## 12. Verification & Automated Testing Suite
 
-The repository contains an extensive automated test suite covering unit tests, API integration tests, security boundaries, and benchmark evaluations.
+The automated suite covers backend APIs, security boundaries, persistence, benchmark behavior, and the browser demo's basic delivery path. Test counts change as regression tests are added, so use the current command output rather than a hard-coded count.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        AUTOMATED TEST SUMMARY                          │
-├────────────────────────────────────────────────────────────────────────┤
-│  Total Collected Tests: 135                                            │
-│  Passed:                131 (100% green across active functionality)   │
-│  Skipped:               1   (Tenant isolation multi-application setup) │
-│  Expected Failure (x):  3   (Persistence disk-restart contract stubs)  │
-│  Full Suite Execution:  ~63 seconds                                    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+The [GitHub Actions quality-gates workflow](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml) compiles backend modules and runs tests on Python 3.11 and 3.13, and syntax-checks every browser ES module.
 
 ### 1. Run the Full Backend Test Suite
+
 ```bash
-python -m pytest backend/tests -v
+# Linux / macOS
+PYTHONPATH=backend python -m pytest backend/tests -q
+
+# Windows PowerShell
+$env:PYTHONPATH="$PWD\backend"
+python -m pytest backend/tests -q
 ```
 
 ### 2. Run the 15-Bundle Synthetic Benchmark
+
 ```bash
 python backend/run_benchmark.py
 ```
-*Evaluates the system across 15 canonical synthetic bundles covering clean cases, missing documents, expired certificates, cross-field contradictions, duplicate reuse, poor scans, and source timeouts. Outputs detailed metrics to `docs/EVALUATION_REPORT.md`.*
 
-### 3. Run Static JavaScript Syntax Validation
-```bash
-# On Linux / macOS
-node --check backend/static/js/api.js backend/static/js/app.js
+The benchmark evaluates 15 canonical synthetic bundles and writes measurements to `docs/EVALUATION_REPORT.md`. Rerun it before quoting performance or accuracy figures.
 
-# On Windows (PowerShell)
-node --check backend/static/js/api.js; node --check backend/static/js/app.js
-```
+### 3. Frontend ES-Module Syntax Validation
+
+The frontend uses browser ES modules. The quality-gates workflow checks every JavaScript file under `backend/static/js/` as an ES module with Node.js 22, rather than checking only the entry-point files.
 
 ---
 
