@@ -83,7 +83,7 @@ def test_reviewer_queue_is_populated():
 
 def _make_fire_safety_pdf() -> bytes:
     """Build a tiny valid PDF carrying a real expiry-date text claim for the demo test."""
-    text = "Issued on: 2023-01-15 Valid until: 2024-01-14"
+    text = "Valid until: 2024-01-14"
     escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     stream = f"BT /F1 12 Tf 50 720 Td ({escaped}) Tj ET\n".encode("ascii")
     objects = [
@@ -123,6 +123,9 @@ def test_real_document_upload_extracts_and_displays_source_claim():
 
         expect(page.locator("#health-indicator-text")).to_contain_text(
             "Backend: Operational", timeout=30000
+        )
+        page.wait_for_function(
+            "localStorage.getItem('pramaan_session_token') !== null", timeout=15000
         )
         application_id = page.evaluate("""async () => {
             const token = localStorage.getItem("pramaan_session_token");
@@ -182,6 +185,28 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(page.locator("#cf-page-view-legend")).to_contain_text("noc_expiry_date")
         page.locator("#btn-close-page-viewer").click()
 
+        # Exercise the protected page-view endpoint for a raster image too.
+        png_buffer = io.BytesIO()
+        Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
+        page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
+        page.locator("#cf-upload-file").set_input_files({
+            "name": "scan_upload_test.png",
+            "mimeType": "image/png",
+            "buffer": png_buffer.getvalue(),
+        })
+        page.locator("#btn-upload-document").click()
+        expect(feedback).to_contain_text(
+            "Upload completed — actual backend response", timeout=20000
+        )
+        expect(feedback).to_contain_text("manual review required", timeout=20000)
+        png_row = page.locator("#cf-docs-table tr").filter(has_text="scan_upload_test.png")
+        expect(png_row).to_be_visible(timeout=20000)
+        png_row.get_by_role("button", name="View p. 1").click()
+        expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
+        expect(page.locator("#cf-page-view-status")).to_contain_text(
+            "rendered from the actual uploaded document bytes"
+        )
+
         # Continue the same document through the end-to-end scrutiny story:
         # extracted evidence -> rule finding -> simulated issuer check -> human decision -> audit.
         page.locator("#btn-run-full-scrutiny").click()
@@ -226,24 +251,4 @@ def test_real_document_upload_extracts_and_displays_source_claim():
             "Cryptographic Audit Chain Intact", timeout=20000
         )
 
-        # Exercise the protected page-view endpoint for a raster image too.
-        png_buffer = io.BytesIO()
-        Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
-        page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
-        page.locator("#cf-upload-file").set_input_files({
-            "name": "scan_upload_test.png",
-            "mimeType": "image/png",
-            "buffer": png_buffer.getvalue(),
-        })
-        page.locator("#btn-upload-document").click()
-        expect(feedback).to_contain_text(
-            "Upload completed — actual backend response", timeout=20000
-        )
-        png_row = page.locator("#cf-docs-table tr").filter(has_text="scan_upload_test.png")
-        expect(png_row).to_be_visible(timeout=20000)
-        png_row.get_by_role("button", name="View p. 1").click()
-        expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
-        expect(page.locator("#cf-page-view-status")).to_contain_text(
-            "rendered from the actual uploaded document bytes"
-        )
         browser.close()
