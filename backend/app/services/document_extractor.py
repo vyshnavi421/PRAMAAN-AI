@@ -140,8 +140,8 @@ class RealDocumentExtractor:
     @staticmethod
     def _is_raster_image(content_bytes: bytes) -> bool:
         return (
-            content_bytes.startswith(b"\\xff\\xd8\\xff")
-            or content_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n")
+            content_bytes.startswith(b"\xff\xd8\xff")
+            or content_bytes.startswith(b"\x89PNG\r\n\x1a\n")
         )
 
     def _ocr_pdf_pages(self, content_bytes: bytes) -> Tuple[List[Dict[str, Any]], int]:
@@ -186,7 +186,7 @@ class RealDocumentExtractor:
                 spans = []
                 width, height = image.size
                 tsv_text = result.stdout.decode("utf-8", errors="replace")
-                for row in csv.DictReader(io.StringIO(tsv_text), delimiter="\\t"):
+                for row in csv.DictReader(io.StringIO(tsv_text), delimiter="\t"):
                     if row.get("level") != "5":
                         continue
                     word = (row.get("text") or "").strip()
