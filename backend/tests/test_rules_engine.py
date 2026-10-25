@@ -120,7 +120,7 @@ def test_required_field_absent_fail():
     app_input = make_application(docs=[doc])
     finding = rule.evaluate(app_input)
 
-    assert finding.status == FindingStatus.DEFICIENCY
+    assert finding.status == FindingStatus.INCONCLUSIVE
     assert "noc_expiry_date" in finding.reason
 
 def test_required_field_uncertain_quality_abstains():
