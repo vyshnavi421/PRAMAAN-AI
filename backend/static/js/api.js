@@ -303,6 +303,24 @@ export class ApiClient {
     });
   }
 
+  async getDocumentPageView(documentId, pageNumber = 1) {
+    const endpoint = `/api/v1/documents/${encodeURIComponent(documentId)}/pages/${encodeURIComponent(pageNumber)}/view`;
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      headers: this.sessionToken ? { Authorization: `Bearer ${this.sessionToken}` } : {}
+    });
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        detail = body?.detail || detail;
+      } catch (_) { /* response wasn't JSON */ }
+      const error = new Error(detail || `HTTP ${response.status} on ${endpoint}`);
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
+  }
+
   async getRetentionPolicy() {
     return this._request('/api/v1/documents/retention-policy');
   }
