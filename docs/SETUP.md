@@ -8,7 +8,7 @@
 ## 1. Prerequisites
 
 - **Python**: Version 3.11, 3.12, or 3.13.
-- **Node.js** (Optional): Version 18+ (only required if running `node --check` static syntax verification).
+- **Node.js** (Optional): Version 22+ for local JavaScript syntax checks; GitHub Actions performs this check automatically.
 - **Tesseract OCR** (Optional): For optical character recognition on scanned raster images. If absent, the system honestly abstains (`status = MANUAL_REVIEW_REQUIRED`) without fabricating claims.
 - **Operating System**: Linux, macOS, or Windows (PowerShell/CMD).
 
@@ -54,65 +54,61 @@ Copy-Item .env.example .env
 
 ## 3. Running Automated Tests & Verification
 
-### Run Full Test Suite (107 Tests)
-```bash
-python -m pytest backend/tests -v
-```
-*Expected Result:* `107 passed in ~18s (100% green)`
+### Run the current backend test suite
 
-### Run Static JavaScript Syntax Validation
+Run from the repository root:
+
 ```bash
-node --check backend/static/js/api.js backend/static/js/app.js
+# Linux / macOS
+PYTHONPATH=backend python -m pytest backend/tests -q
+
+# Windows PowerShell
+$env:PYTHONPATH="$PWD\backend"
+python -m pytest backend/tests -q
 ```
 
-### Run Labelled 15-Bundle Benchmark
+Do not use a fixed expected test count; new regression tests are added over time. GitHub Actions runs the suite on Python 3.11 and 3.13 and compiles the Python modules.
+
+### Check frontend syntax
+
+The frontend is composed of browser ES modules, not a Node.js package. The [Quality Gates workflow](https://github.com/vyshnavi421/PRAMAAN-AI/actions/workflows/ci.yml) checks all JavaScript modules as ES modules using Node.js 22.
+
+### Run the 15-bundle synthetic benchmark
+
+From the repository root:
+
 ```bash
 python backend/run_benchmark.py
 ```
-*Expected Result:* Evaluates 15 synthetic application bundles across all edge cases (clean, expired, cross-document mismatch, duplicate reuse, timeout, etc.).
+
+The benchmark uses synthetic fixtures and writes measurements to `docs/EVALUATION_REPORT.md`. Rerun it before quoting any latency or accuracy figure.
 
 ---
 
 ## 4. Starting the Application Server
 
-Start the FastAPI application with live hot-reloading:
+From the repository root:
 
 ```bash
-# From workspace root
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --app-dir backend
 ```
-*(Or navigate to `cd backend` and run `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload`)*
+
+Open `http://127.0.0.1:8000/` in a browser. The server also exposes:
+- **Swagger API docs:** `http://127.0.0.1:8000/api/v1/docs`
+- **Health probe:** `http://127.0.0.1:8000/health`
 
 ---
 
-## 5. Accessing the System
+## 5. Browser Demo Smoke Check and Walkthrough
 
-Once Uvicorn is running:
-- **Interactive Reviewer Studio (Web UI):** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-- **Swagger Interactive API Documentation:** [http://127.0.0.1:8000/api/v1/docs](http://127.0.0.1:8000/api/v1/docs)
-- **ReDoc API Documentation:** [http://127.0.0.1:8000/api/v1/redoc](http://127.0.0.1:8000/api/v1/redoc)
-- **System Health Probe:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+With `PYTHONPATH=backend` set (PowerShell: `$env:PYTHONPATH="$PWD\backend"`), run the checked-in smoke tests:
 
----
-
-## 6. End-to-End Programmatic Flow Verification
-
-With the server running, execute the automated 13-step verification script:
 ```bash
-python scratch/verify_flow.py
+python -m pytest backend/tests/test_demo_smoke.py -q
 ```
 
-The script verifies:
-1. Health & readiness probe.
-2. Server-validated demo session creation.
-3. Secure document intake & SHA-256 byte persistence.
-4. Real PDF visitor text stream coordinate extraction.
-5. Complete Pre-Scrutiny execution.
-6. 100% Coverage audit reconciliation.
-7. Finding navigation & handbook citations.
-8. Evidence graph link traceability.
-9. Cross-application duplicate and change-aware historical review.
-10. Honest uncertainty and source-unavailable timeouts.
-11. Human review decision modal and audit logging.
-12. Report reopening from persistence.
-13. Cryptographic hash-chain integrity & tamper simulation.
+These tests confirm that the health endpoint responds, the UI includes the synthetic-data disclosure, and the browser entry modules and stylesheet are served. They do not replace testing every interaction in a real browser.
+
+For the 3–5 minute reviewer walkthrough, follow [`docs/DEMO_SCRIPT.md`](DEMO_SCRIPT.md).
+
+> **Reproducibility note:** Some older internal notes refer to `scratch/verify_flow.py`. That local-only script is not included in this repository. Use the checked-in pytest suite and the browser walkthrough instead.
