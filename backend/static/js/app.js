@@ -134,9 +134,22 @@ class AppRouter {
   async init() {
     this.bindEvents();
     this.bindKeyboardShortcuts();
-    await this.initSession();
+
+    const health = await this.checkBackendHealth();
+    const demoModeEnabled = health?.data?.is_demo_mode === true;
+    const roleSelect = document.getElementById('role-select');
+
+    if (roleSelect) {
+      roleSelect.disabled = !demoModeEnabled;
+    }
+
+    if (demoModeEnabled) {
+      await this.initSession();
+    } else {
+      api.setSession(null, null);
+    }
+
     this.navigate('command-center');
-    this.checkBackendHealth();
   }
 
   async initSession() {
@@ -161,15 +174,21 @@ class AppRouter {
       const res = await api.getHealth();
       const dot = document.getElementById('health-indicator-dot');
       const text = document.getElementById('health-indicator-text');
+
       if (res.data?.status === 'healthy') {
         dot.style.backgroundColor = '#22c55e';
-        text.textContent = 'Backend: Operational';
+        text.textContent = res.data?.is_demo_mode === false
+          ? 'Backend: Operational (Demo disabled)'
+          : 'Backend: Operational';
       }
+
+      return res;
     } catch (_) {
       const dot = document.getElementById('health-indicator-dot');
       const text = document.getElementById('health-indicator-text');
       dot.style.backgroundColor = '#ef4444';
       text.textContent = 'Backend: Offline';
+      return null;
     }
   }
 
