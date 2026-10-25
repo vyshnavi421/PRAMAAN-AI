@@ -258,7 +258,10 @@ class RealDocumentExtractor:
         # Helper to find span bbox for matched text
         def find_bbox(target_str: str) -> Tuple[int, Optional[List[float]], str]:
             target_lower = target_str.lower().strip()
-            # Prefer exact/containing spans; ignore tiny fragments that can match arbitrary evidence.
+            # Prefer exact spans, then containing spans. When the PDF text visitor gives us
+            # an entire line/chunk, narrow the horizontal box to the matched claim substring
+            # instead of highlighting the whole line. OCR word boxes remain unchanged for
+            # exact token matches.
             for matcher in (
                 lambda text: text == target_lower,
                 lambda text: target_lower in text,
@@ -266,8 +269,31 @@ class RealDocumentExtractor:
             ):
                 for page_data in pages_data:
                     for span in page_data["spans"]:
-                        if matcher(span["text"].lower().strip()):
-                            return page_data["page_number"], span["bbox"], span["text"]
+                        span_text = span["text"].lower().strip()
+                        if not matcher(span_text):
+                            continue
+                        bbox = span.get("bbox")
+                        if not bbox or len(bbox) != 4:
+                            return page_data["page_number"], bbox, span["text"]
+
+                        span_x1, y1, span_x2, y2 = [float(value) for value in bbox]
+                        match_at = span_text.find(target_lower)
+                        # Target contained by the span: proportional horizontal refinement
+                        # is an approximation, because pypdf exposes text chunks, not glyphs.
+                        if match_at >= 0 and len(span_text) > 0:
+                            span_width = max(0.0, span_x2 - span_x1)
+                            match_x1 = span_x1 + span_width * (match_at / len(span_text))
+                            match_x2 = span_x1 + span_width * (
+                                (match_at + len(target_lower)) / len(span_text)
+                            )
+                            match_x1 = max(0.0, min(1.0, match_x1))
+                            match_x2 = max(0.0, min(1.0, match_x2))
+                            if match_x2 > match_x1:
+                                return page_data["page_number"], [
+                                    round(match_x1, 4), y1, round(match_x2, 4), y2
+                                ], span["text"]
+
+                        return page_data["page_number"], bbox, span["text"]
             # Fallback to page 1 snippet
             p1_text = pages_data[0]["text"] if pages_data else ""
             idx = p1_text.lower().find(target_lower)
