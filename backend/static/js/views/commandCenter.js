@@ -10,6 +10,40 @@ export class CommandCenterView {
   }
 
   async render() {
+    let health;
+    try {
+      health = await api.getHealth();
+    } catch (_) {
+      health = null;
+    }
+
+    if (!health || health.data?.status !== 'healthy') {
+      this.container.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Backend unavailable</h1>
+            <p class="page-desc">The backend health check failed. Connect to the backend and reload this view.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    if (health.data?.is_demo_mode !== true) {
+      this.container.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Demo mode disabled</h1>
+            <p class="page-desc">Demo authentication and synthetic demonstration bundles are unavailable. Configure an approved authentication provider to access protected reviewer features.</p>
+          </div>
+        </div>
+        <div class="table-card" style="padding: var(--space-6);">
+          <p style="color: var(--slate-600);">No demo bundles or seeded dashboard metrics are displayed while demo mode is disabled.</p>
+        </div>
+      `;
+      return;
+    }
+
     this.container.innerHTML = `
       <div class="page-header">
         <div>
