@@ -1,6 +1,6 @@
 # PRAMAAN-AI: REST API Contracts & Endpoint Specification
 
-**Document Status:** Approved Architecture Baseline (Planning Only)  
+**Document Status:** Working reference; runtime behavior must be confirmed against the FastAPI routes and OpenAPI schema  
 **Version:** 1.0.0  
 **Format:** OpenAPI 3.1 Compatible JSON/REST  
 **Base URL:** `/api/v1`  
@@ -41,15 +41,15 @@ All API endpoints follow predictable HTTP status codes and return standardized e
 | `/applications` | GET | `institution_user` (scoped), `reviewer`, `auditor` | No |
 | `/applications` | POST | `institution_user` | Yes |
 | `/applications/{id}` | GET | `institution_user` (owner), `reviewer`, `auditor` | Yes |
-| `/applications/{id}/documents` | POST | `institution_user` (owner), `reviewer` | Yes |
-| `/documents/{id}` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
-| `/documents/{id}/pages/{page}/view` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
+| `/documents/upload` | POST | `institution_user` (owner), `reviewer` | Yes |
+| `/documents/{id}` | GET | Authenticated user; institution users are owner-scoped | Yes |
+| `/documents/{id}/content` | GET | Authenticated user; institution users are owner-scoped | Yes |\n| `/documents/{id}/pages/{page}/view` | GET | Authenticated user; institution users are owner-scoped | Yes |\n| `/documents/{id}/extract` | POST | `institution_user` (owner), `reviewer` | Yes |
 | `/applications/{id}/validation-runs` | POST | `institution_user` (owner), `reviewer` | Yes |
 | `/applications/{id}/validation-runs` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
 | `/findings/{id}` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
 | `/findings/{id}/review-actions` | POST | `reviewer` | Yes |
 | `/applications/{id}/evidence-graph` | GET | `institution_user` (owner), `reviewer`, `auditor` | No |
-| `/documents/{id}/verification-attempts`| POST | `reviewer` | Yes |
+| `/documents/{id}/verify` | POST | `reviewer`, `rules_admin`, `institution_user` (owner-scoped) | Yes |\n| `/documents/{id}/verification-attempts` | GET | Authenticated user; institution users are owner-scoped | Implementation-specific |
 | `/applications/{id}/duplicates` | GET | `reviewer`, `auditor` | No |
 | `/applications/{id}/compare-previous` | POST | `reviewer`, `auditor` | Yes |
 | `/rule-packs` | GET | `reviewer`, `rules_admin`, `auditor` | No |
@@ -124,68 +124,54 @@ All API endpoints follow predictable HTTP status codes and return standardized e
 
 ### 3.3 Secure Document Intake & Extraction
 
-#### `POST /applications/{application_id}/documents`
-- **Description:** Secure intake of PDF/Image documents.
-- **Request:** `multipart/form-data`
-  - `file`: Binary file (PDF, PNG, JPG, max 25MB)
-  - `document_type`: `FIRE_SAFETY_NOC`
-- **Response 202 Accepted:**
+The routes in this subsection are implemented in `backend/app/api/routes/documents.py`. The payload examples are synthetic and illustrative.
+
+#### `POST /documents/upload`
+- **Authorization:** `institution_user` for their own institution, or `reviewer`. Auditors and rules administrators are read-only for uploads.
+- **Request:** `multipart/form-data` with `file`, `document_type` (one of the `DocumentType` enum values), and `application_id`.
+- **Supported files:** PDF, JPEG, and PNG only. Filename extension must match the detected file signature. Empty files, unknown signatures, and unsupported extensions are rejected.
+- **Size:** maximum file size is 25 MiB (25 × 1024 × 1024 bytes). The route rejects an oversized declared request length where available and stops reading the uploaded file once its own bytes exceed the limit. Note that the framework parses/spools multipart data before calling the route handler.
+- **Response:** HTTP 201 with a `Document` record including a generated document ID, sanitized filename, file size, MIME type, SHA-256, page count, verification status, and extracted fields.
+- **Errors:** `400` for invalid document type/file policy, `401` without an authenticated session, `403` for forbidden role/tenant, `404` for unknown application, and `413` for a file over the limit.
+- **Failure handling:** if storage, extraction, dossier persistence, or upload audit recording fails, the route attempts to remove the uploaded bytes and document metadata.
+- Uploading the same document type does not delete prior documents. The system keeps the existing record and downstream rules are responsible for selecting the relevant document.
+
+Example response (abbreviated):
 ```json
 {
-  "id": "d1e2f3a4-5555-6666-7777-888899990000",
-  "application_id": "e2a4b6c8-1111-2222-3333-444455556666",
+  "id": "synthetic-document-id",
+  "application_id": "app-case-clean",
   "document_type": "FIRE_SAFETY_NOC",
-  "original_filename": "fire_safety_noc_2026.pdf",
+  "original_filename": "fire_safety_noc.pdf",
   "file_size_bytes": 1048576,
   "mime_type": "application/pdf",
-  "sha256_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f901234567890abcdef1234567890abcdef",
-  "page_count": 2,
+  "sha256_hash": "<64-character SHA-256 digest>",
+  "page_count": 1,
   "verification_status": "verification pending",
-  "processing_status": "PROCESSED",
-  "created_at": "2026-10-23T11:05:00.000Z"
+  "extracted_fields": []
 }
 ```
 
-#### `GET /documents/{document_id}/extracted-fields`
-- **Description:** Returns extracted factual claims with bounding-box provenance.
-- **Response 200 OK:**
-```json
-{
-  "document_id": "d1e2f3a4-5555-6666-7777-888899990000",
-  "fields": [
-    {
-      "field_key": "noc_issue_date",
-      "field_value": "2023-01-15",
-      "raw_value": "15th January, 2023",
-      "data_type": "DATE",
-      "confidence": 0.982,
-      "extraction_method": "PDF_TEXT_STREAM",
-      "provenance": {
-        "page_number": 1,
-        "bounding_box": [0.12, 0.45, 0.35, 0.48],
-        "surrounding_snippet": "Issued on this 15th January, 2023 by the State Fire Service",
-        "quality_label": "HIGH"
-      }
-    },
-    {
-      "field_key": "noc_expiry_date",
-      "field_value": "2024-01-14",
-      "raw_value": "14/01/2024",
-      "data_type": "DATE",
-      "confidence": 0.965,
-      "extraction_method": "PDF_TEXT_STREAM",
-      "provenance": {
-        "page_number": 1,
-        "bounding_box": [0.12, 0.52, 0.32, 0.55],
-        "surrounding_snippet": "Valid up to: 14/01/2024",
-        "quality_label": "HIGH"
-      }
-    }
-  ]
-}
-```
+**Important distinction:** extraction does not verify a document. A PDF text extraction can return `verification pending`; OCR-only results or unreadable content require manual review. No recognized claim means the extractor abstains rather than fabricating a field from the filename.
 
----
+#### `POST /documents/{document_id}/extract`
+- Re-runs extraction using the stored upload bytes. Seeded demo documents without real stored binaries return `409`; missing real file bytes return `404`.
+- Empty re-extraction preserves existing fields. If persistence fails, the route restores the previous in-memory field/status state and returns an error.
+- The extractor uses PDF text extraction and optional Tesseract OCR. OCR work is limited to the first 10 PDF pages per extraction; OCR-derived data requires human review.
+
+#### `GET /documents/{document_id}`
+Returns a protected document record with extracted claims and provenance. Each metadata read appends a `DOCUMENT_ACCESSED` audit event.
+
+#### `GET /documents/{document_id}/content`
+Returns the exact stored bytes with `X-Content-Type-Options: nosniff`. Missing real binaries return `404`; the route does not fabricate replacement bytes. Content access is audited.
+
+#### `GET /documents/{document_id}/pages/{page}/view`
+- `page` is 1-indexed. Returns `image/png` rendered from the real uploaded page.
+- Seeded demo placeholders and missing bytes return `404`; out-of-range pages return `404`; unavailable page rendering returns `503`.
+- Page-view requests are audited as `DOCUMENT_PAGE_VIEWED`. No live issuer is contacted by this route.
+
+#### `POST /documents/{document_id}/verify` and `GET /documents/{document_id}/verification-attempts`
+Verification uses the repository's configured simulated adapters; it does not contact live AICTE or government systems. The POST route records an attempt, and the GET route returns its history. See the concrete route declarations in `backend/app/api/routes/verification.py` for current parameters and permissions.
 
 ### 3.4 Validation Runs & Evidence Findings
 
