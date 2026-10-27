@@ -137,7 +137,10 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(page.locator("#health-indicator-text")).to_contain_text(
             "Backend: Operational", timeout=30000
         )
-        page.evaluate("window.appRouter.openCase('app-case-clean')")
+        page.locator(
+             '[aria-label="Open Bundle 01: Apex Institute of Technology, Clean"]'
+        ).click()
+
         expect(page.locator("#cf-upload-form")).to_be_visible(timeout=20000)
 
         page.locator("#cf-upload-type").select_option("FIRE_SAFETY_NOC")
