@@ -1,5 +1,6 @@
 import os
 import io
+import uuid
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -25,20 +26,27 @@ def test_demo_entry_and_review_path():
         ).click()
         expect(page.locator("#cf-title")).to_contain_text("APP-", timeout=20000)
         page.locator("#btn-run-full-scrutiny").click()
-        expect(page.locator("#studio-app-heading")).to_contain_text("APP-", timeout=45000)
+        expect(page.locator("#studio-app-heading")).to_contain_text(
+            "APP-", timeout=45000
+        )
         expect(page.locator("#studio-explain-card")).to_be_visible(timeout=20000)
 
         page.locator("#btn-studio-mode-graph").click()
         expect(page.locator("#studio-graph-container")).to_be_visible()
         page.locator("#btn-studio-mode-pdf").click()
 
-        screenshot_dir = Path(os.getenv("PRAMAAN_SCREENSHOT_DIR", "/tmp/pramaan-demo-artifacts"))
-        screenshot_dir.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(screenshot_dir / "pramaan-evidence-studio.png"), full_page=True)
-
-        deficiency = page.locator("#studio-findings-list .finding-card").filter(
-            has_text="DEFICIENCY"
+        screenshot_dir = Path(
+            os.getenv("PRAMAAN_SCREENSHOT_DIR", "/tmp/pramaan-demo-artifacts")
         )
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        page.screenshot(
+            path=str(screenshot_dir / "pramaan-evidence-studio.png"),
+            full_page=True,
+        )
+
+        deficiency = page.locator(
+            "#studio-findings-list .finding-card"
+        ).filter(has_text="DEFICIENCY")
         expect(deficiency.first).to_be_visible(timeout=15000)
         deficiency.first.click()
         page.locator("#btn-studio-open-decision").click()
@@ -57,7 +65,6 @@ def test_demo_entry_and_review_path():
             "Cryptographic Audit Chain Intact", timeout=20000
         )
         browser.close()
-
 
 
 def test_reviewer_queue_is_populated():
@@ -80,7 +87,6 @@ def test_reviewer_queue_is_populated():
         browser.close()
 
 
-
 def _make_fire_safety_pdf() -> bytes:
     """Build a tiny valid PDF carrying a real expiry-date text claim for the demo test."""
     text = "Valid until: 2027-06-30"
@@ -92,11 +98,16 @@ def _make_fire_safety_pdf() -> bytes:
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
         b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"endstream",
+        b"<< /Length "
+        + str(len(stream)).encode("ascii")
+        + b" >>\nstream\n"
+        + stream
+        + b"endstream",
     ]
 
     pdf = bytearray(b"%PDF-1.4\n")
     offsets = [0]
+
     for index, obj in enumerate(objects, start=1):
         offsets.append(len(pdf))
         pdf.extend(f"{index} 0 obj\n".encode("ascii"))
@@ -106,8 +117,10 @@ def _make_fire_safety_pdf() -> bytes:
     xref_offset = len(pdf)
     pdf.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
     pdf.extend(b"0000000000 65535 f \n")
+
     for offset in offsets[1:]:
         pdf.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+
     pdf.extend(
         f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
         f"startxref\n{xref_offset}\n%%EOF\n".encode("ascii")
@@ -128,14 +141,18 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(page.locator("#cf-upload-form")).to_be_visible(timeout=20000)
 
         page.locator("#cf-upload-type").select_option("FIRE_SAFETY_NOC")
+
+        # Generate a unique filename for every test run.
+        upload_filename = f"fire_safety_noc_upload_test_{uuid.uuid4().hex}.pdf"
+
         page.locator("#cf-upload-file").set_input_files({
-            "name": "fire_safety_noc_upload_test.pdf",
+            "name": upload_filename,
             "mimeType": "application/pdf",
             "buffer": _make_fire_safety_pdf(),
         })
         page.locator("#btn-upload-document").click()
 
-        # Assert claims returned from real uploaded bytes, not a client-side fixture.
+        # Verify the actual backend response and extracted claim.
         feedback = page.locator("#cf-upload-feedback")
         expect(feedback).to_contain_text(
             "Upload completed — actual backend response", timeout=20000
@@ -143,31 +160,45 @@ def test_real_document_upload_extracts_and_displays_source_claim():
         expect(feedback).to_contain_text("noc_expiry_date", timeout=20000)
         expect(feedback).to_contain_text("2027-06-30", timeout=20000)
         expect(feedback).to_contain_text("97% confidence", timeout=20000)
+
+        # Match the exact unique filename uploaded in this test.
         uploaded_row = page.locator("#cf-docs-table tr").filter(
-            has_text="fire_safety_noc_upload_test.pdf"
+            has_text=upload_filename
         )
         expect(uploaded_row).to_contain_text("1 claim", timeout=20000)
         expect(uploaded_row).to_contain_text("2027-06-30")
 
-        # Exercise the protected page-view endpoint using a real raster image so the test
-        # does not depend on Poppler being installed on the CI runner.
+        # Test the protected page-view endpoint using an actual PNG image.
+        # This avoids depending on Poppler being installed on the CI runner.
         png_buffer = io.BytesIO()
-        Image.new("RGB", (8, 8), color=(240, 240, 240)).save(png_buffer, format="PNG")
+        Image.new("RGB", (8, 8), color=(240, 240, 240)).save(
+            png_buffer, format="PNG"
+        )
+
+        # Generate a unique PNG filename for each test run.
+        png_filename = f"scan_upload_test_{uuid.uuid4().hex}.png"
+
         page.locator("#cf-upload-type").select_option("LAND_USE_CERTIFICATE")
         page.locator("#cf-upload-file").set_input_files({
-            "name": "scan_upload_test.png",
+            "name": png_filename,
             "mimeType": "image/png",
             "buffer": png_buffer.getvalue(),
         })
         page.locator("#btn-upload-document").click()
+
         expect(feedback).to_contain_text(
             "Upload completed — actual backend response", timeout=20000
         )
-        png_row = page.locator("#cf-docs-table tr").filter(has_text="scan_upload_test.png")
+
+        png_row = page.locator("#cf-docs-table tr").filter(
+         has_text=png_filename
+        )
         expect(png_row).to_be_visible(timeout=20000)
         png_row.get_by_role("button", name="View p. 1").click()
+
         expect(page.locator("#cf-page-view-image")).to_be_visible(timeout=20000)
         expect(page.locator("#cf-page-view-status")).to_contain_text(
             "rendered from the actual uploaded document bytes"
         )
+
         browser.close()
